@@ -119,7 +119,28 @@ export default function Home() {
       const hash = await compressToHash(text);
       const url = `${window.location.origin}${window.location.pathname}#${hash}`;
       window.history.replaceState(null, "", `#${hash}`);
-      await navigator.clipboard.writeText(url);
+
+      // Try clipboard API first, fall back to execCommand
+      let copied = false;
+      if (navigator.clipboard?.writeText) {
+        try {
+          await navigator.clipboard.writeText(url);
+          copied = true;
+        } catch {
+          // Clipboard API denied, try fallback
+        }
+      }
+      if (!copied) {
+        const textarea = document.createElement("textarea");
+        textarea.value = url;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      }
+
       setShareStatus("copied");
       setTimeout(() => setShareStatus("idle"), 2000);
     } catch {
