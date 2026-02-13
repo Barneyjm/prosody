@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import Editor from "@/components/Editor";
 import Transport from "@/components/Transport";
+import { compressToHash, decompressFromHash } from "@/lib/share";
 
 const DEFAULT_TEXT = `C4 E4 G4 C5 G4 E4 C4 -
 - - C3 - - C3 - C3
@@ -21,8 +22,21 @@ export default function Home() {
   const [loop, setLoop] = useState(true);
   const [bpm, setBpmState] = useState(120);
   const [activeNotes, setActiveNotes] = useState<ActiveNote[]>([]);
+  const [shareStatus, setShareStatus] = useState<"idle" | "copied" | "error">("idle");
   const audioRef = useRef<typeof import("@/lib/audio") | null>(null);
   const cleanupTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Load shared content from URL hash on mount
+  useEffect(() => {
+    const hash = window.location.hash.slice(1);
+    if (hash) {
+      decompressFromHash(hash)
+        .then((decoded) => setText(decoded))
+        .catch(() => {
+          // Invalid hash, ignore
+        });
+    }
+  }, []);
 
   // Dynamically import audio module (requires browser environment)
   const getAudio = useCallback(async () => {
@@ -100,6 +114,20 @@ export default function Home() {
     setLoop((prev) => !prev);
   }, []);
 
+  const handleShare = useCallback(async () => {
+    try {
+      const hash = await compressToHash(text);
+      const url = `${window.location.origin}${window.location.pathname}#${hash}`;
+      window.history.replaceState(null, "", `#${hash}`);
+      await navigator.clipboard.writeText(url);
+      setShareStatus("copied");
+      setTimeout(() => setShareStatus("idle"), 2000);
+    } catch {
+      setShareStatus("error");
+      setTimeout(() => setShareStatus("idle"), 2000);
+    }
+  }, [text]);
+
   // Stop playback when text changes during playback
   const handleTextChange = useCallback(
     (newText: string) => {
@@ -141,15 +169,42 @@ export default function Home() {
             Write music in plain text
           </span>
         </div>
-        <div className="text-xs text-[var(--text-muted)]">
-          <kbd className="px-1.5 py-0.5 rounded bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-[var(--text-secondary)]">
-            Ctrl
-          </kbd>
-          {" + "}
-          <kbd className="px-1.5 py-0.5 rounded bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-[var(--text-secondary)]">
-            Enter
-          </kbd>
-          <span className="ml-1.5">to play/stop</span>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={handleShare}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors border border-[var(--border-color)] hover:border-[var(--accent-blue)] text-[var(--text-secondary)] hover:text-[var(--accent-blue)] bg-[var(--bg-tertiary)]"
+            title="Copy shareable link to clipboard"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+              <polyline points="16 6 12 2 8 6" />
+              <line x1="12" y1="2" x2="12" y2="15" />
+            </svg>
+            {shareStatus === "copied"
+              ? "Copied!"
+              : shareStatus === "error"
+              ? "Failed"
+              : "Share"}
+          </button>
+          <div className="text-xs text-[var(--text-muted)]">
+            <kbd className="px-1.5 py-0.5 rounded bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-[var(--text-secondary)]">
+              Ctrl
+            </kbd>
+            {" + "}
+            <kbd className="px-1.5 py-0.5 rounded bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-[var(--text-secondary)]">
+              Enter
+            </kbd>
+            <span className="ml-1.5">to play/stop</span>
+          </div>
         </div>
       </header>
 
