@@ -114,42 +114,28 @@ export default function Home() {
     setLoop((prev) => !prev);
   }, []);
 
-  const copyToClipboard = useCallback(async (value: string) => {
-    // Try Clipboard API first
-    if (navigator.clipboard?.writeText) {
-      try {
-        await navigator.clipboard.writeText(value);
-        return;
-      } catch {
-        // Clipboard API denied, fall through to fallback
-      }
-    }
-    // Fallback: offscreen textarea with explicit focus
-    const el = document.createElement("textarea");
-    el.value = value;
-    el.setAttribute("readonly", "");
-    el.style.position = "fixed";
-    el.style.left = "-9999px";
-    document.body.appendChild(el);
-    el.focus();
-    el.select();
-    document.execCommand("copy");
-    document.body.removeChild(el);
-  }, []);
-
   const handleShare = useCallback(async () => {
     try {
       const hash = await compressToHash(text);
       const url = `${window.location.origin}${window.location.pathname}#${hash}`;
       window.history.replaceState(null, "", `#${hash}`);
-      await copyToClipboard(url);
-      setShareStatus("copied");
+      if (navigator.share) {
+        await navigator.share({ url });
+        setShareStatus("copied");
+      } else {
+        await navigator.clipboard.writeText(url);
+        setShareStatus("copied");
+      }
       setTimeout(() => setShareStatus("idle"), 2000);
-    } catch {
+    } catch (e) {
+      // User cancelled share dialog — not an error
+      if (e instanceof Error && e.name === "AbortError") {
+        return;
+      }
       setShareStatus("error");
       setTimeout(() => setShareStatus("idle"), 2000);
     }
-  }, [text, copyToClipboard]);
+  }, [text]);
 
   // Stop playback when text changes during playback
   const handleTextChange = useCallback(
@@ -196,7 +182,7 @@ export default function Home() {
           <button
             onClick={handleShare}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors border border-[var(--border-color)] hover:border-[var(--accent-blue)] text-[var(--text-secondary)] hover:text-[var(--accent-blue)] bg-[var(--bg-tertiary)]"
-            title="Copy shareable link to clipboard"
+            title="Share a link to this text"
           >
             <svg
               width="14"
@@ -213,7 +199,7 @@ export default function Home() {
               <line x1="12" y1="2" x2="12" y2="15" />
             </svg>
             {shareStatus === "copied"
-              ? "Copied!"
+              ? "Shared!"
               : shareStatus === "error"
               ? "Failed"
               : "Share"}
