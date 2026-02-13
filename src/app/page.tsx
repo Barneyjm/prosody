@@ -114,40 +114,42 @@ export default function Home() {
     setLoop((prev) => !prev);
   }, []);
 
+  const copyToClipboard = useCallback(async (value: string) => {
+    // Try Clipboard API first
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(value);
+        return;
+      } catch {
+        // Clipboard API denied, fall through to fallback
+      }
+    }
+    // Fallback: offscreen textarea with explicit focus
+    const el = document.createElement("textarea");
+    el.value = value;
+    el.setAttribute("readonly", "");
+    el.style.position = "fixed";
+    el.style.left = "-9999px";
+    document.body.appendChild(el);
+    el.focus();
+    el.select();
+    document.execCommand("copy");
+    document.body.removeChild(el);
+  }, []);
+
   const handleShare = useCallback(async () => {
     try {
       const hash = await compressToHash(text);
       const url = `${window.location.origin}${window.location.pathname}#${hash}`;
       window.history.replaceState(null, "", `#${hash}`);
-
-      // Try clipboard API first, fall back to execCommand
-      let copied = false;
-      if (navigator.clipboard?.writeText) {
-        try {
-          await navigator.clipboard.writeText(url);
-          copied = true;
-        } catch {
-          // Clipboard API denied, try fallback
-        }
-      }
-      if (!copied) {
-        const textarea = document.createElement("textarea");
-        textarea.value = url;
-        textarea.style.position = "fixed";
-        textarea.style.opacity = "0";
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand("copy");
-        document.body.removeChild(textarea);
-      }
-
+      await copyToClipboard(url);
       setShareStatus("copied");
       setTimeout(() => setShareStatus("idle"), 2000);
     } catch {
       setShareStatus("error");
       setTimeout(() => setShareStatus("idle"), 2000);
     }
-  }, [text]);
+  }, [text, copyToClipboard]);
 
   // Stop playback when text changes during playback
   const handleTextChange = useCallback(
