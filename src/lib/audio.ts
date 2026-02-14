@@ -113,10 +113,10 @@ function ensureSynths() {
 function ensurePercussion() {
   if (!snareInst) {
     snareInst = new Tone.NoiseSynth({
-      noise: { type: "white" },
-      envelope: { attack: 0.001, decay: 0.2, sustain: 0 },
+      noise: { type: "pink" },
+      envelope: { attack: 0.001, decay: 0.15, sustain: 0.02, release: 0.1 },
     }).toDestination();
-    snareInst.volume.value = -10;
+    snareInst.volume.value = -6;
   }
   if (!kickInst) {
     kickInst = new Tone.MembraneSynth({
@@ -135,8 +135,8 @@ function ensurePercussion() {
       resonance: 4000,
       octaves: 1.5,
     }).toDestination();
-    hihatInst.frequency.setValueAtTime(200, 0);
-    hihatInst.volume.value = -15;
+    hihatInst.frequency.setValueAtTime(400, 0);
+    hihatInst.volume.value = -8;
   }
 }
 
@@ -176,13 +176,13 @@ function playEvent(ev: NoteEvent, time: number, bpmValue: number) {
       if (bassInst) bassInst.triggerAttackRelease(ev.notes[0], durationSeconds, time, velocity);
       break;
     case "snare":
-      if (snareInst) snareInst.triggerAttackRelease("16n", time, velocity);
+      if (snareInst) snareInst.triggerAttackRelease("8n", time, velocity);
       break;
     case "kick":
       if (kickInst) kickInst.triggerAttackRelease("C1", "8n", time, velocity);
       break;
     case "hihat":
-      if (hihatInst) hihatInst.triggerAttackRelease("32n", time, velocity);
+      if (hihatInst) hihatInst.triggerAttackRelease("16n", time, velocity);
       break;
   }
 }
