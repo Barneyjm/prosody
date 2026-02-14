@@ -242,15 +242,6 @@ export default function Home() {
         </span>
       </div>
 
-      {/* Editor */}
-      <main className="flex-1 flex flex-col p-4 overflow-hidden">
-        <Editor
-          value={text}
-          onChange={handleTextChange}
-          activeNotes={activeNotes}
-        />
-      </main>
-
       {/* Transport controls */}
       <Transport
         isPlaying={isPlaying}
@@ -262,6 +253,15 @@ export default function Home() {
         onLoopToggle={handleLoopToggle}
         onBpmChange={handleBpmChange}
       />
+
+      {/* Editor */}
+      <main className="flex-1 flex flex-col p-4 overflow-hidden">
+        <Editor
+          value={text}
+          onChange={handleTextChange}
+          activeNotes={activeNotes}
+        />
+      </main>
     </div>
   );
 }
