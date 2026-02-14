@@ -1,5 +1,5 @@
 import * as Tone from "tone";
-import { parseAllLines, NoteEvent } from "./parser";
+import { parseAllLines, NoteEvent, parseInstrumentPrefix } from "./parser";
 
 const SALAMANDER_BASE_URL =
   "https://tonejs.github.io/audio/salamander/";
@@ -44,9 +44,20 @@ export type ActiveNoteCallback = (
   tokenIndex: number
 ) => void;
 
+// Piano sampler
 let sampler: Tone.Sampler | null = null;
+let samplerLoaded = false;
+
+// Synth instruments
+let synthInst: Tone.PolySynth | null = null;
+let bassInst: Tone.MonoSynth | null = null;
+
+// Percussion instruments
+let snareInst: Tone.NoiseSynth | null = null;
+let kickInst: Tone.MembraneSynth | null = null;
+let hihatInst: Tone.MetalSynth | null = null;
+
 let parts: Tone.Part[] = [];
-let loaded = false;
 let onActiveNote: ActiveNoteCallback | null = null;
 
 export function setActiveNoteCallback(cb: ActiveNoteCallback | null) {
@@ -54,14 +65,14 @@ export function setActiveNoteCallback(cb: ActiveNoteCallback | null) {
 }
 
 export async function ensureSampler(): Promise<Tone.Sampler> {
-  if (sampler && loaded) return sampler;
+  if (sampler && samplerLoaded) return sampler;
 
   return new Promise((resolve, reject) => {
     sampler = new Tone.Sampler({
       urls: SAMPLE_MAP,
       baseUrl: SALAMANDER_BASE_URL,
       onload: () => {
-        loaded = true;
+        samplerLoaded = true;
         resolve(sampler!);
       },
       onerror: (err: Error) => {
@@ -72,8 +83,65 @@ export async function ensureSampler(): Promise<Tone.Sampler> {
   });
 }
 
+function ensureSynths() {
+  if (!synthInst) {
+    synthInst = new Tone.PolySynth(Tone.Synth).toDestination();
+    synthInst.set({
+      oscillator: { type: "triangle" },
+      envelope: { attack: 0.02, decay: 0.1, sustain: 0.3, release: 1 },
+    });
+    synthInst.volume.value = -8;
+  }
+  if (!bassInst) {
+    bassInst = new Tone.MonoSynth({
+      oscillator: { type: "sawtooth" },
+      filter: { Q: 1, type: "lowpass", rolloff: -24 },
+      envelope: { attack: 0.01, decay: 0.1, sustain: 0.9, release: 0.4 },
+      filterEnvelope: {
+        attack: 0.01,
+        decay: 0.06,
+        sustain: 0.5,
+        release: 2,
+        baseFrequency: 200,
+        octaves: 7,
+      },
+    }).toDestination();
+    bassInst.volume.value = -5;
+  }
+}
+
+function ensurePercussion() {
+  if (!snareInst) {
+    snareInst = new Tone.NoiseSynth({
+      noise: { type: "white" },
+      envelope: { attack: 0.001, decay: 0.2, sustain: 0 },
+    }).toDestination();
+    snareInst.volume.value = -10;
+  }
+  if (!kickInst) {
+    kickInst = new Tone.MembraneSynth({
+      pitchDecay: 0.05,
+      octaves: 10,
+      oscillator: { type: "sine" },
+      envelope: { attack: 0.001, decay: 0.4, sustain: 0.01, release: 1.4 },
+    }).toDestination();
+    kickInst.volume.value = -5;
+  }
+  if (!hihatInst) {
+    hihatInst = new Tone.MetalSynth({
+      envelope: { attack: 0.001, decay: 0.1, release: 0.01 },
+      harmonicity: 5.1,
+      modulationIndex: 32,
+      resonance: 4000,
+      octaves: 1.5,
+    }).toDestination();
+    hihatInst.frequency.setValueAtTime(200, 0);
+    hihatInst.volume.value = -15;
+  }
+}
+
 export function getSamplerLoadState(): boolean {
-  return loaded;
+  return samplerLoaded;
 }
 
 function clearParts() {
@@ -81,6 +149,42 @@ function clearParts() {
     part.dispose();
   }
   parts = [];
+}
+
+// Detect which instruments are needed in the text (lightweight, no full parse)
+function detectInstruments(text: string): Set<string> {
+  const instruments = new Set<string>();
+  for (const line of text.split("\n")) {
+    const { instrument } = parseInstrumentPrefix(line);
+    instruments.add(instrument);
+  }
+  return instruments;
+}
+
+function playEvent(ev: NoteEvent, time: number, bpmValue: number) {
+  const velocity = ev.soft ? 0.4 : 0.8;
+  const durationSeconds = (60 / bpmValue) * ev.duration;
+
+  switch (ev.instrument) {
+    case "piano":
+      if (sampler) sampler.triggerAttackRelease(ev.notes, durationSeconds, time, velocity);
+      break;
+    case "synth":
+      if (synthInst) synthInst.triggerAttackRelease(ev.notes, durationSeconds, time, velocity);
+      break;
+    case "bass":
+      if (bassInst) bassInst.triggerAttackRelease(ev.notes[0], durationSeconds, time, velocity);
+      break;
+    case "snare":
+      if (snareInst) snareInst.triggerAttackRelease("16n", time, velocity);
+      break;
+    case "kick":
+      if (kickInst) kickInst.triggerAttackRelease("C1", "8n", time, velocity);
+      break;
+    case "hihat":
+      if (hihatInst) hihatInst.triggerAttackRelease("32n", time, velocity);
+      break;
+  }
 }
 
 export function scheduleMusic(
@@ -113,12 +217,7 @@ export function scheduleMusic(
 
     const part = new Tone.Part((time, value: { event: NoteEvent }) => {
       const ev = value.event;
-      if (!sampler) return;
-
-      const velocity = ev.soft ? 0.4 : 0.8;
-      const durationSeconds = (60 / transport.bpm.value) * ev.duration;
-
-      sampler.triggerAttackRelease(ev.notes, durationSeconds, time, velocity);
+      playEvent(ev, time, transport.bpm.value);
 
       // Schedule visual feedback on the draw loop
       Tone.getDraw().schedule(() => {
@@ -154,7 +253,19 @@ export async function startPlayback(
   loop: boolean
 ): Promise<{ maxBeats: number }> {
   await Tone.start();
-  await ensureSampler();
+
+  // Initialize instruments based on what's in the text
+  const instrumentsNeeded = detectInstruments(text);
+
+  if (instrumentsNeeded.has("piano")) {
+    await ensureSampler();
+  }
+  if (instrumentsNeeded.has("synth") || instrumentsNeeded.has("bass")) {
+    ensureSynths();
+  }
+  if (instrumentsNeeded.has("snare") || instrumentsNeeded.has("kick") || instrumentsNeeded.has("hihat")) {
+    ensurePercussion();
+  }
 
   const transport = Tone.getTransport();
   transport.bpm.value = bpm;
@@ -174,6 +285,9 @@ export function stopPlayback() {
   transport.cancel();
   if (sampler) {
     sampler.releaseAll();
+  }
+  if (synthInst) {
+    synthInst.releaseAll();
   }
 }
 

@@ -5,9 +5,10 @@ import Editor from "@/components/Editor";
 import Transport from "@/components/Transport";
 import { compressToHash, decompressFromHash } from "@/lib/share";
 
-const DEFAULT_TEXT = `C4 E4 G4 C5 G4 E4 C4 -
-- - C3 - - C3 - C3
-E4 - E4 - F4 - E4 D4`;
+const DEFAULT_TEXT = `piano: C4 E4 G4 C5 G4 E4 C4 -
+bass: C2 - - C2 - - E2 -
+kick: x - x - x - x -
+hihat: x x x x x x x x`;
 
 interface ActiveNote {
   lineIndex: number;
@@ -220,8 +221,16 @@ export default function Home() {
       {/* Help bar */}
       <div className="px-6 py-2 text-xs text-[var(--text-muted)] border-b border-[var(--border-color)] bg-[var(--bg-primary)] flex gap-6 flex-wrap">
         <span>
+          <strong className="text-[var(--accent-pink)]">Instruments:</strong>{" "}
+          piano: synth: bass: kick: snare: hihat:
+        </span>
+        <span>
           <strong className="text-[var(--accent-blue)]">Notes:</strong> C4 D#5
           Ab3
+        </span>
+        <span>
+          <strong className="text-[var(--accent-orange)]">Hits:</strong> x
+          (percussion)
         </span>
         <span>
           <strong className="text-[var(--text-muted)]">Rests:</strong> - or _
@@ -229,12 +238,6 @@ export default function Home() {
         <span>
           <strong className="text-[var(--accent-purple)]">Chords:</strong> [C4
           E4 G4]
-        </span>
-        <span>
-          <strong className="text-[var(--accent-orange)]">Dotted:</strong> C4.
-        </span>
-        <span>
-          <strong className="text-[var(--accent-orange)]">Tied:</strong> C4~
         </span>
         <span>
           <strong className="text-[var(--accent-green)]">Soft:</strong> c4

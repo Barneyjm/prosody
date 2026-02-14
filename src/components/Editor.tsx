@@ -7,7 +7,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { tokenize, Token } from "@/lib/parser";
+import { tokenize, parseInstrumentPrefix, Token } from "@/lib/parser";
 
 const LINE_COLORS = [
   "var(--line-color-1)",
@@ -40,6 +40,8 @@ function tokenToClass(token: Token): string {
       return "text-[var(--text-muted)]";
     case "chord":
       return "text-[var(--accent-purple)]";
+    case "hit":
+      return "text-[var(--accent-orange)]";
     case "invalid":
       return "text-[var(--accent-red)] underline decoration-wavy decoration-[var(--accent-red)]";
   }
@@ -54,26 +56,53 @@ function HighlightedLine({
   lineIndex: number;
   activeNotes: ActiveNote[];
 }) {
-  const tokens = useMemo(() => tokenize(line), [line]);
+  const { content, prefixLength } = useMemo(
+    () => parseInstrumentPrefix(line),
+    [line]
+  );
+  const tokens = useMemo(() => tokenize(content), [content]);
   const now = Date.now();
 
+  const elements: React.ReactNode[] = [];
+
+  // Render instrument prefix if present
+  if (prefixLength > 0) {
+    const prefix = line.slice(0, prefixLength);
+    const colonIndex = prefix.indexOf(":");
+    elements.push(
+      <span key="prefix-name" className="text-[var(--accent-pink)] font-semibold">
+        {prefix.slice(0, colonIndex + 1)}
+      </span>
+    );
+    if (colonIndex + 1 < prefix.length) {
+      elements.push(
+        <span key="prefix-space" className="text-[var(--text-secondary)]">
+          {prefix.slice(colonIndex + 1)}
+        </span>
+      );
+    }
+  }
+
   if (tokens.length === 0) {
+    if (prefixLength > 0) {
+      // Line has only a prefix and no notes
+      return <>{elements}</>;
+    }
     return <span className="text-[var(--text-muted)]">{line || " "}</span>;
   }
 
-  // Rebuild the line with spans per token, preserving whitespace
-  const elements: React.ReactNode[] = [];
+  // Rebuild the content with spans per token, preserving whitespace
   let pos = 0;
 
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i];
-    const rawStart = line.indexOf(token.raw, pos);
+    const rawStart = content.indexOf(token.raw, pos);
 
     // Add any whitespace before this token
     if (rawStart > pos) {
       elements.push(
         <span key={`ws-${i}`} className="text-[var(--text-secondary)]">
-          {line.slice(pos, rawStart)}
+          {content.slice(pos, rawStart)}
         </span>
       );
     }
@@ -102,10 +131,10 @@ function HighlightedLine({
   }
 
   // Trailing whitespace
-  if (pos < line.length) {
+  if (pos < content.length) {
     elements.push(
       <span key="trailing" className="text-[var(--text-secondary)]">
-        {line.slice(pos)}
+        {content.slice(pos)}
       </span>
     );
   }
@@ -227,7 +256,7 @@ export default function Editor({ value, onChange, activeNotes }: EditorProps) {
           autoCapitalize="off"
           autoCorrect="off"
           autoComplete="off"
-          placeholder="Start typing notes... e.g. C4 E4 G4 C5"
+          placeholder="Start typing notes... e.g. piano: C4 E4 G4 C5"
         />
       </div>
     </div>
