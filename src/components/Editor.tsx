@@ -1,13 +1,6 @@
 "use client";
 
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { tokenize, parseInstrumentPrefix, Token } from "@/lib/parser";
+import React, { useCallback, useRef, useState } from "react";
 
 const LINE_COLORS = [
   "var(--line-color-1)",
@@ -32,128 +25,15 @@ interface EditorProps {
   activeNotes: ActiveNote[];
 }
 
-function tokenToClass(token: Token): string {
-  switch (token.type) {
-    case "note":
-      return "text-[var(--accent-blue)]";
-    case "rest":
-      return "text-[var(--text-muted)]";
-    case "chord":
-      return "text-[var(--accent-purple)]";
-    case "hit":
-      return "text-[var(--accent-orange)]";
-    case "invalid":
-      return "text-[var(--accent-red)] underline decoration-wavy decoration-[var(--accent-red)]";
-  }
-}
-
-function HighlightedLine({
-  line,
-  lineIndex,
-  activeNotes,
-}: {
-  line: string;
-  lineIndex: number;
-  activeNotes: ActiveNote[];
-}) {
-  const { content, prefixLength } = useMemo(
-    () => parseInstrumentPrefix(line),
-    [line]
-  );
-  const tokens = useMemo(() => tokenize(content), [content]);
-  const now = Date.now();
-
-  const elements: React.ReactNode[] = [];
-
-  // Render instrument prefix if present
-  if (prefixLength > 0) {
-    const prefix = line.slice(0, prefixLength);
-    const colonIndex = prefix.indexOf(":");
-    elements.push(
-      <span key="prefix-name" className="text-[var(--accent-pink)]">
-        {prefix.slice(0, colonIndex + 1)}
-      </span>
-    );
-    if (colonIndex + 1 < prefix.length) {
-      elements.push(
-        <span key="prefix-space" className="text-[var(--text-secondary)]">
-          {prefix.slice(colonIndex + 1)}
-        </span>
-      );
-    }
-  }
-
-  if (tokens.length === 0) {
-    if (prefixLength > 0) {
-      // Line has only a prefix and no notes
-      return <>{elements}</>;
-    }
-    return <span className="text-[var(--text-muted)]">{line || " "}</span>;
-  }
-
-  // Rebuild the content with spans per token, preserving whitespace
-  let pos = 0;
-
-  for (let i = 0; i < tokens.length; i++) {
-    const token = tokens[i];
-    const rawStart = content.indexOf(token.raw, pos);
-
-    // Add any whitespace before this token
-    if (rawStart > pos) {
-      elements.push(
-        <span key={`ws-${i}`} className="text-[var(--text-secondary)]">
-          {content.slice(pos, rawStart)}
-        </span>
-      );
-    }
-
-    const isActive = activeNotes.some(
-      (an) =>
-        an.lineIndex === lineIndex &&
-        an.tokenIndex === i &&
-        now - an.timestamp < 300
-    );
-
-    elements.push(
-      <span
-        key={`tok-${i}`}
-        className={`${tokenToClass(token)} transition-colors duration-150 ${
-          isActive
-            ? "bg-white/20 rounded"
-            : ""
-        }`}
-      >
-        {token.raw}
-      </span>
-    );
-
-    pos = rawStart + token.raw.length;
-  }
-
-  // Trailing whitespace
-  if (pos < content.length) {
-    elements.push(
-      <span key="trailing" className="text-[var(--text-secondary)]">
-        {content.slice(pos)}
-      </span>
-    );
-  }
-
-  return <>{elements}</>;
-}
-
-export default function Editor({ value, onChange, activeNotes }: EditorProps) {
+export default function Editor({ value, onChange }: EditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const highlightRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
-  const [scrollLeft, setScrollLeft] = useState(0);
 
   const lines = value.split("\n");
 
   const handleScroll = useCallback(() => {
     if (textareaRef.current) {
       setScrollTop(textareaRef.current.scrollTop);
-      setScrollLeft(textareaRef.current.scrollLeft);
     }
   }, []);
 
@@ -163,14 +43,6 @@ export default function Editor({ value, onChange, activeNotes }: EditorProps) {
     },
     [onChange]
   );
-
-  // Sync scroll between textarea and highlight overlay
-  useEffect(() => {
-    if (highlightRef.current) {
-      highlightRef.current.scrollTop = scrollTop;
-      highlightRef.current.scrollLeft = scrollLeft;
-    }
-  }, [scrollTop, scrollLeft]);
 
   // Handle tab key for indentation
   const handleKeyDown = useCallback(
@@ -184,7 +56,6 @@ export default function Editor({ value, onChange, activeNotes }: EditorProps) {
         const newValue =
           value.substring(0, start) + "  " + value.substring(end);
         onChange(newValue);
-        // Restore cursor position after React re-render
         requestAnimationFrame(() => {
           textarea.selectionStart = textarea.selectionEnd = start + 2;
         });
@@ -213,52 +84,20 @@ export default function Editor({ value, onChange, activeNotes }: EditorProps) {
         </div>
       </div>
 
-      {/* Editor area */}
-      <div className="flex-1 relative overflow-hidden">
-        {/* Syntax highlighting overlay */}
-        <div
-          ref={highlightRef}
-          className="absolute inset-0 py-4 px-4 pointer-events-none overflow-hidden whitespace-pre font-mono text-sm leading-6"
-          aria-hidden="true"
-        >
-          {lines.map((line, i) => (
-            <div
-              key={i}
-              className="h-6"
-              style={{
-                borderLeft: `2px solid ${
-                  LINE_COLORS[i % LINE_COLORS.length]
-                }15`,
-                paddingLeft: "0.5rem",
-              }}
-            >
-              <HighlightedLine
-                line={line}
-                lineIndex={i}
-                activeNotes={activeNotes}
-              />
-            </div>
-          ))}
-        </div>
-
-        {/* Actual textarea (transparent text, visible caret) */}
-        <textarea
-          ref={textareaRef}
-          value={value}
-          onChange={handleInput}
-          onScroll={handleScroll}
-          onKeyDown={handleKeyDown}
-          className="absolute inset-0 w-full h-full py-4 px-4 bg-transparent text-transparent caret-[var(--accent-blue)] resize-none outline-none font-mono text-sm leading-6 overflow-auto"
-          style={{
-            paddingLeft: "calc(1rem + 0.5rem + 2px)",
-          }}
-          spellCheck={false}
-          autoCapitalize="off"
-          autoCorrect="off"
-          autoComplete="off"
-          placeholder="Start typing notes... e.g. piano: C4 E4 G4 C5"
-        />
-      </div>
+      {/* Plain textarea */}
+      <textarea
+        ref={textareaRef}
+        value={value}
+        onChange={handleInput}
+        onScroll={handleScroll}
+        onKeyDown={handleKeyDown}
+        className="flex-1 py-4 px-4 bg-transparent text-[var(--text-primary)] caret-[var(--accent-blue)] resize-none outline-none font-mono text-sm leading-6 overflow-auto"
+        spellCheck={false}
+        autoCapitalize="off"
+        autoCorrect="off"
+        autoComplete="off"
+        placeholder="Start typing notes... e.g. piano: C4 E4 G4 C5"
+      />
     </div>
   );
 }
