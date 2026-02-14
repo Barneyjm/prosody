@@ -117,9 +117,9 @@ function HighlightedLine({
     elements.push(
       <span
         key={`tok-${i}`}
-        className={`${tokenToClass(token)} transition-all duration-150 ${
+        className={`${tokenToClass(token)} transition-colors duration-150 ${
           isActive
-            ? "bg-white/20 rounded px-0.5 scale-105 font-bold"
+            ? "bg-white/20 rounded"
             : ""
         }`}
       >
@@ -224,7 +224,7 @@ export default function Editor({ value, onChange, activeNotes }: EditorProps) {
           {lines.map((line, i) => (
             <div
               key={i}
-              className="h-6 flex items-center"
+              className="h-6"
               style={{
                 borderLeft: `2px solid ${
                   LINE_COLORS[i % LINE_COLORS.length]
