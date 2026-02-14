@@ -345,7 +345,7 @@ export async function renderOffline(text: string, bpm: number): Promise<Blob> {
   const { lines, maxBeats } = parseAllLines(text);
   if (maxBeats === 0) throw new Error("Nothing to render");
 
-  const durationSeconds = (maxBeats * 60) / bpm + 2; // extra 2s for release tails
+  const durationSeconds = (maxBeats * 60) / bpm + 0.5; // brief tail for release envelopes
   const instrumentsNeeded = detectInstruments(text);
 
   const buffer = await Tone.Offline(async ({ transport }) => {
