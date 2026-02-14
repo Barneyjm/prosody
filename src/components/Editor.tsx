@@ -25,11 +25,19 @@ interface EditorProps {
   activeNotes: ActiveNote[];
 }
 
-export default function Editor({ value, onChange }: EditorProps) {
+export default function Editor({ value, onChange, activeNotes }: EditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
 
   const lines = value.split("\n");
+
+  // Build set of line indices that have an active note right now
+  const now = Date.now();
+  const activeLines = new Set(
+    activeNotes
+      .filter((n) => now - n.timestamp < 300)
+      .map((n) => n.lineIndex)
+  );
 
   const handleScroll = useCallback(() => {
     if (textareaRef.current) {
@@ -72,15 +80,26 @@ export default function Editor({ value, onChange }: EditorProps) {
         style={{ minWidth: "3rem" }}
       >
         <div style={{ transform: `translateY(${-scrollTop}px)` }}>
-          {lines.map((_, i) => (
-            <div
-              key={i}
-              className="leading-6 text-sm h-6 flex items-center justify-end pr-1"
-              style={{ color: LINE_COLORS[i % LINE_COLORS.length] }}
-            >
-              {i + 1}
-            </div>
-          ))}
+          {lines.map((_, i) => {
+            const color = LINE_COLORS[i % LINE_COLORS.length];
+            const isActive = activeLines.has(i);
+            return (
+              <div
+                key={i}
+                className={`leading-6 text-sm h-6 flex items-center justify-end pr-1 transition-all duration-150 ${
+                  isActive ? "font-bold" : ""
+                }`}
+                style={{
+                  color,
+                  textShadow: isActive
+                    ? `0 0 8px ${color}, 0 0 16px ${color}`
+                    : "none",
+                }}
+              >
+                {i + 1}
+              </div>
+            );
+          })}
         </div>
       </div>
 
