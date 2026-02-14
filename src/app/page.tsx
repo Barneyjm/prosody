@@ -4,11 +4,9 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import Editor from "@/components/Editor";
 import Transport from "@/components/Transport";
 import { compressToHash, decompressFromHash } from "@/lib/share";
+import { EXAMPLES } from "@/lib/examples";
 
-const DEFAULT_TEXT = `piano: C4 E4 G4 C5 G4 E4 C4 -
-bass: C2 - - C2 - - E2 -
-kick: x - x - x - x -
-hihat: x x x x x x x x`;
+const DEFAULT_TEXT = EXAMPLES[0].text;
 
 interface ActiveNote {
   lineIndex: number;
@@ -178,6 +176,19 @@ export default function Home() {
     [isPlaying, handleStop]
   );
 
+  const handleLoadExample = useCallback(
+    (index: number) => {
+      const example = EXAMPLES[index];
+      if (!example) return;
+      setText(example.text);
+      setBpmState(example.bpm);
+      if (isPlaying) {
+        handleStop();
+      }
+    },
+    [isPlaying, handleStop]
+  );
+
   // Stop playback when text changes during playback
   const handleTextChange = useCallback(
     (newText: string) => {
@@ -220,6 +231,25 @@ export default function Home() {
           </span>
         </div>
         <div className="flex items-center gap-4">
+          <select
+            onChange={(e) => {
+              const idx = parseInt(e.target.value, 10);
+              if (!isNaN(idx)) handleLoadExample(idx);
+              e.target.value = "";
+            }}
+            defaultValue=""
+            className="px-3 py-1.5 rounded text-xs border border-[var(--border-color)] hover:border-[var(--accent-purple)] text-[var(--text-secondary)] bg-[var(--bg-tertiary)] outline-none cursor-pointer"
+            title="Load an example"
+          >
+            <option value="" disabled>
+              Examples...
+            </option>
+            {EXAMPLES.map((ex, i) => (
+              <option key={i} value={i}>
+                {ex.name} ({ex.bpm} BPM)
+              </option>
+            ))}
+          </select>
           <input
             ref={fileInputRef}
             type="file"
