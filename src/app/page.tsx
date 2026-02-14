@@ -24,6 +24,7 @@ export default function Home() {
   const [bpm, setBpmState] = useState(120);
   const [activeNotes, setActiveNotes] = useState<ActiveNote[]>([]);
   const [shareStatus, setShareStatus] = useState<"idle" | "copied" | "error">("idle");
+  const [downloadStatus, setDownloadStatus] = useState<"idle" | "rendering" | "error">("idle");
   const audioRef = useRef<typeof import("@/lib/audio") | null>(null);
   const cleanupTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -138,6 +139,25 @@ export default function Home() {
     }
   }, [text]);
 
+  const handleDownload = useCallback(async () => {
+    setDownloadStatus("rendering");
+    try {
+      const audio = await getAudio();
+      const blob = await audio.renderOffline(text, bpm);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "prosody.wav";
+      a.click();
+      URL.revokeObjectURL(url);
+      setDownloadStatus("idle");
+    } catch (err) {
+      console.error("Download error:", err);
+      setDownloadStatus("error");
+      setTimeout(() => setDownloadStatus("idle"), 2000);
+    }
+  }, [text, bpm, getAudio]);
+
   // Stop playback when text changes during playback
   const handleTextChange = useCallback(
     (newText: string) => {
@@ -204,6 +224,32 @@ export default function Home() {
               : shareStatus === "error"
               ? "Failed"
               : "Share"}
+          </button>
+          <button
+            onClick={handleDownload}
+            disabled={downloadStatus === "rendering"}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors border border-[var(--border-color)] hover:border-[var(--accent-green)] text-[var(--text-secondary)] hover:text-[var(--accent-green)] bg-[var(--bg-tertiary)] disabled:opacity-50"
+            title="Download as WAV file"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            {downloadStatus === "rendering"
+              ? "Rendering..."
+              : downloadStatus === "error"
+              ? "Failed"
+              : "Download"}
           </button>
           <div className="text-xs text-[var(--text-muted)]">
             <kbd className="px-1.5 py-0.5 rounded bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-[var(--text-secondary)]">
