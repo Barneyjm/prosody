@@ -27,6 +27,7 @@ export default function Home() {
   const [downloadStatus, setDownloadStatus] = useState<"idle" | "rendering" | "error">("idle");
   const audioRef = useRef<typeof import("@/lib/audio") | null>(null);
   const cleanupTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load shared content from URL hash on mount
   useEffect(() => {
@@ -158,6 +159,25 @@ export default function Home() {
     }
   }, [text, bpm, getAudio]);
 
+  const handleFileUpload = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const content = reader.result as string;
+        setText(content);
+        if (isPlaying) {
+          handleStop();
+        }
+      };
+      reader.readAsText(file);
+      // Reset so the same file can be re-uploaded
+      e.target.value = "";
+    },
+    [isPlaying, handleStop]
+  );
+
   // Stop playback when text changes during playback
   const handleTextChange = useCallback(
     (newText: string) => {
@@ -200,6 +220,35 @@ export default function Home() {
           </span>
         </div>
         <div className="flex items-center gap-4">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".txt,.prosody,.text,text/plain"
+            onChange={handleFileUpload}
+            className="hidden"
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors border border-[var(--border-color)] hover:border-[var(--accent-purple)] text-[var(--text-secondary)] hover:text-[var(--accent-purple)] bg-[var(--bg-tertiary)]"
+            title="Open a text file"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="12" y1="18" x2="12" y2="12" />
+              <line x1="9" y1="15" x2="15" y2="15" />
+            </svg>
+            Open
+          </button>
           <button
             onClick={handleShare}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors border border-[var(--border-color)] hover:border-[var(--accent-blue)] text-[var(--text-secondary)] hover:text-[var(--accent-blue)] bg-[var(--bg-tertiary)]"
