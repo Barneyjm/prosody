@@ -70,7 +70,7 @@ function HighlightedLine({
     const prefix = line.slice(0, prefixLength);
     const colonIndex = prefix.indexOf(":");
     elements.push(
-      <span key="prefix-name" className="text-[var(--accent-pink)] font-semibold">
+      <span key="prefix-name" className="text-[var(--accent-pink)]">
         {prefix.slice(0, colonIndex + 1)}
       </span>
     );

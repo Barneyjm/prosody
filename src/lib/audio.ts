@@ -55,7 +55,7 @@ let bassInst: Tone.MonoSynth | null = null;
 // Percussion instruments
 let snareInst: Tone.NoiseSynth | null = null;
 let kickInst: Tone.MembraneSynth | null = null;
-let hihatInst: Tone.MetalSynth | null = null;
+let hihatInst: Tone.NoiseSynth | null = null;
 
 let parts: Tone.Part[] = [];
 let onActiveNote: ActiveNoteCallback | null = null;
@@ -128,14 +128,10 @@ function ensurePercussion() {
     kickInst.volume.value = -5;
   }
   if (!hihatInst) {
-    hihatInst = new Tone.MetalSynth({
-      envelope: { attack: 0.001, decay: 0.1, release: 0.01 },
-      harmonicity: 5.1,
-      modulationIndex: 32,
-      resonance: 4000,
-      octaves: 1.5,
+    hihatInst = new Tone.NoiseSynth({
+      noise: { type: "white" },
+      envelope: { attack: 0.001, decay: 0.05, sustain: 0 },
     }).toDestination();
-    hihatInst.frequency.setValueAtTime(400, 0);
     hihatInst.volume.value = -8;
   }
 }
