@@ -4,10 +4,9 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import Editor from "@/components/Editor";
 import Transport from "@/components/Transport";
 import { compressToHash, decompressFromHash } from "@/lib/share";
+import { EXAMPLES } from "@/lib/examples";
 
-const DEFAULT_TEXT = `C4 E4 G4 C5 G4 E4 C4 -
-- - C3 - - C3 - C3
-E4 - E4 - F4 - E4 D4`;
+const DEFAULT_TEXT = EXAMPLES[0].text;
 
 interface ActiveNote {
   lineIndex: number;
@@ -23,8 +22,10 @@ export default function Home() {
   const [bpm, setBpmState] = useState(120);
   const [activeNotes, setActiveNotes] = useState<ActiveNote[]>([]);
   const [shareStatus, setShareStatus] = useState<"idle" | "copied" | "error">("idle");
+  const [downloadStatus, setDownloadStatus] = useState<"idle" | "rendering" | "error">("idle");
   const audioRef = useRef<typeof import("@/lib/audio") | null>(null);
   const cleanupTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load shared content from URL hash on mount
   useEffect(() => {
@@ -137,6 +138,57 @@ export default function Home() {
     }
   }, [text]);
 
+  const handleDownload = useCallback(async () => {
+    setDownloadStatus("rendering");
+    try {
+      const audio = await getAudio();
+      const blob = await audio.renderOffline(text, bpm);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "prosody.wav";
+      a.click();
+      URL.revokeObjectURL(url);
+      setDownloadStatus("idle");
+    } catch (err) {
+      console.error("Download error:", err);
+      setDownloadStatus("error");
+      setTimeout(() => setDownloadStatus("idle"), 2000);
+    }
+  }, [text, bpm, getAudio]);
+
+  const handleFileUpload = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const content = reader.result as string;
+        setText(content);
+        if (isPlaying) {
+          handleStop();
+        }
+      };
+      reader.readAsText(file);
+      // Reset so the same file can be re-uploaded
+      e.target.value = "";
+    },
+    [isPlaying, handleStop]
+  );
+
+  const handleLoadExample = useCallback(
+    (index: number) => {
+      const example = EXAMPLES[index];
+      if (!example) return;
+      setText(example.text);
+      setBpmState(example.bpm);
+      if (isPlaying) {
+        handleStop();
+      }
+    },
+    [isPlaying, handleStop]
+  );
+
   // Stop playback when text changes during playback
   const handleTextChange = useCallback(
     (newText: string) => {
@@ -179,6 +231,54 @@ export default function Home() {
           </span>
         </div>
         <div className="flex items-center gap-4">
+          <select
+            onChange={(e) => {
+              const idx = parseInt(e.target.value, 10);
+              if (!isNaN(idx)) handleLoadExample(idx);
+              e.target.value = "";
+            }}
+            defaultValue=""
+            className="px-3 py-1.5 rounded text-xs border border-[var(--border-color)] hover:border-[var(--accent-purple)] text-[var(--text-secondary)] bg-[var(--bg-tertiary)] outline-none cursor-pointer"
+            title="Load an example"
+          >
+            <option value="" disabled>
+              Examples...
+            </option>
+            {EXAMPLES.map((ex, i) => (
+              <option key={i} value={i}>
+                {ex.name} ({ex.bpm} BPM)
+              </option>
+            ))}
+          </select>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".txt,.prosody,.text,text/plain"
+            onChange={handleFileUpload}
+            className="hidden"
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors border border-[var(--border-color)] hover:border-[var(--accent-purple)] text-[var(--text-secondary)] hover:text-[var(--accent-purple)] bg-[var(--bg-tertiary)]"
+            title="Open a text file"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="12" y1="18" x2="12" y2="12" />
+              <line x1="9" y1="15" x2="15" y2="15" />
+            </svg>
+            Open
+          </button>
           <button
             onClick={handleShare}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors border border-[var(--border-color)] hover:border-[var(--accent-blue)] text-[var(--text-secondary)] hover:text-[var(--accent-blue)] bg-[var(--bg-tertiary)]"
@@ -204,6 +304,32 @@ export default function Home() {
               ? "Failed"
               : "Share"}
           </button>
+          <button
+            onClick={handleDownload}
+            disabled={downloadStatus === "rendering"}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors border border-[var(--border-color)] hover:border-[var(--accent-green)] text-[var(--text-secondary)] hover:text-[var(--accent-green)] bg-[var(--bg-tertiary)] disabled:opacity-50"
+            title="Download as WAV file"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            {downloadStatus === "rendering"
+              ? "Rendering..."
+              : downloadStatus === "error"
+              ? "Failed"
+              : "Download"}
+          </button>
           <div className="text-xs text-[var(--text-muted)]">
             <kbd className="px-1.5 py-0.5 rounded bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-[var(--text-secondary)]">
               Ctrl
@@ -220,8 +346,16 @@ export default function Home() {
       {/* Help bar */}
       <div className="px-6 py-2 text-xs text-[var(--text-muted)] border-b border-[var(--border-color)] bg-[var(--bg-primary)] flex gap-6 flex-wrap">
         <span>
+          <strong className="text-[var(--accent-pink)]">Instruments:</strong>{" "}
+          piano: synth: bass: kick: snare: hihat:
+        </span>
+        <span>
           <strong className="text-[var(--accent-blue)]">Notes:</strong> C4 D#5
           Ab3
+        </span>
+        <span>
+          <strong className="text-[var(--accent-orange)]">Hits:</strong> x
+          (percussion)
         </span>
         <span>
           <strong className="text-[var(--text-muted)]">Rests:</strong> - or _
@@ -231,25 +365,18 @@ export default function Home() {
           E4 G4]
         </span>
         <span>
-          <strong className="text-[var(--accent-orange)]">Dotted:</strong> C4.
-        </span>
-        <span>
-          <strong className="text-[var(--accent-orange)]">Tied:</strong> C4~
-        </span>
-        <span>
           <strong className="text-[var(--accent-green)]">Soft:</strong> c4
           (lowercase)
         </span>
+        <span>
+          <strong className="text-[var(--accent-blue)]">Dotted:</strong> C4.
+          (1.5 beats)
+        </span>
+        <span>
+          <strong className="text-[var(--accent-pink)]">Tied:</strong> C4~ ~
+          (sustain)
+        </span>
       </div>
-
-      {/* Editor */}
-      <main className="flex-1 flex flex-col p-4 overflow-hidden">
-        <Editor
-          value={text}
-          onChange={handleTextChange}
-          activeNotes={activeNotes}
-        />
-      </main>
 
       {/* Transport controls */}
       <Transport
@@ -262,6 +389,15 @@ export default function Home() {
         onLoopToggle={handleLoopToggle}
         onBpmChange={handleBpmChange}
       />
+
+      {/* Editor */}
+      <main className="flex-1 flex flex-col p-4 overflow-hidden">
+        <Editor
+          value={text}
+          onChange={handleTextChange}
+          activeNotes={activeNotes}
+        />
+      </main>
     </div>
   );
 }

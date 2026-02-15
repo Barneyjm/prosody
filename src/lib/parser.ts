@@ -1,4 +1,4 @@
-export type TokenType = "note" | "rest" | "chord" | "invalid";
+export type TokenType = "note" | "rest" | "chord" | "hit" | "invalid";
 
 export interface NoteToken {
   type: "note";
@@ -22,12 +22,17 @@ export interface ChordToken {
   notes: NoteToken[];
 }
 
+export interface HitToken {
+  type: "hit";
+  raw: string;
+}
+
 export interface InvalidToken {
   type: "invalid";
   raw: string;
 }
 
-export type Token = NoteToken | RestToken | ChordToken | InvalidToken;
+export type Token = NoteToken | RestToken | ChordToken | HitToken | InvalidToken;
 
 export interface NoteEvent {
   notes: string[]; // pitch names like ["C4", "E4", "G4"]
@@ -36,10 +41,37 @@ export interface NoteEvent {
   lineIndex: number;
   tokenIndex: number;
   soft: boolean;
+  instrument: string;
 }
+
+// Supported instruments
+export const INSTRUMENTS: Record<string, { type: "pitched" | "percussion"; label: string }> = {
+  piano: { type: "pitched", label: "Piano" },
+  synth: { type: "pitched", label: "Synth" },
+  bass: { type: "pitched", label: "Bass" },
+  kick: { type: "percussion", label: "Kick" },
+  snare: { type: "percussion", label: "Snare" },
+  hihat: { type: "percussion", label: "Hi-Hat" },
+};
 
 // Regex for a single note: C#4. or c4~ etc.
 const NOTE_REGEX = /^([A-Ga-g])([#b]?)(\d)?(\.)?(~)?$/;
+
+export function parseInstrumentPrefix(line: string): {
+  instrument: string;
+  content: string;
+  prefixLength: number;
+} {
+  const match = line.match(/^(\w+):\s*/);
+  if (match && match[1].toLowerCase() in INSTRUMENTS) {
+    return {
+      instrument: match[1].toLowerCase(),
+      content: line.slice(match[0].length),
+      prefixLength: match[0].length,
+    };
+  }
+  return { instrument: "piano", content: line, prefixLength: 0 };
+}
 
 export function parseNote(raw: string): NoteToken | null {
   const match = raw.match(NOTE_REGEX);
@@ -127,6 +159,12 @@ export function tokenize(input: string): Token[] {
       continue;
     }
 
+    // Hit marker (for percussion)
+    if (raw === "x" || raw === "X") {
+      tokens.push({ type: "hit", raw });
+      continue;
+    }
+
     // Note
     const note = parseNote(raw);
     if (note) {
@@ -144,8 +182,9 @@ export function tokenize(input: string): Token[] {
 export function parseLine(
   line: string,
   lineIndex: number
-): { tokens: Token[]; events: NoteEvent[] } {
-  const tokens = tokenize(line);
+): { tokens: Token[]; events: NoteEvent[]; instrument: string; prefixLength: number } {
+  const { instrument, content, prefixLength } = parseInstrumentPrefix(line);
+  const tokens = tokenize(content);
   const events: NoteEvent[] = [];
   let beat = 0;
 
@@ -153,6 +192,20 @@ export function parseLine(
     const token = tokens[i];
 
     if (token.type === "rest") {
+      beat += 1;
+      continue;
+    }
+
+    if (token.type === "hit") {
+      events.push({
+        notes: ["C4"],
+        beat,
+        duration: 1,
+        lineIndex,
+        tokenIndex: i,
+        soft: false,
+        instrument,
+      });
       beat += 1;
       continue;
     }
@@ -184,6 +237,7 @@ export function parseLine(
         lineIndex,
         tokenIndex: i,
         soft: token.soft,
+        instrument,
       });
 
       beat += duration;
@@ -202,6 +256,7 @@ export function parseLine(
         lineIndex,
         tokenIndex: i,
         soft: token.notes.some((n) => n.soft),
+        instrument,
       });
 
       beat += duration;
@@ -215,12 +270,12 @@ export function parseLine(
     }
   }
 
-  return { tokens, events };
+  return { tokens, events, instrument, prefixLength };
 }
 
 export function parseAllLines(
   text: string
-): { lines: { tokens: Token[]; events: NoteEvent[] }[]; maxBeats: number } {
+): { lines: { tokens: Token[]; events: NoteEvent[]; instrument: string; prefixLength: number }[]; maxBeats: number } {
   const lines = text.split("\n").map((line, i) => parseLine(line, i));
   const maxBeats = Math.max(0, ...lines.map((l) => {
     if (l.events.length === 0) return 0;
