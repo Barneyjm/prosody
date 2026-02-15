@@ -86,6 +86,58 @@ snare: - - x - - - x -
 hihat: x x x x x x x x
 ```
 
+## YAML Format
+
+For longer compositions, use YAML to define reusable sections and arrange them into a song:
+
+```yaml
+bpm: 120
+
+sections:
+  verse:
+    piano: "[C4 E4 G4] - [F4 A4 C5] -"
+    bass: "C2 - F2 -"
+    kick: "x - x -"
+
+  chorus:
+    piano: "[G4 B4 D5] - [C4 E4 G4] -"
+    synth: "G5 E5 C5 G4"
+    bass: "G2 - C2 -"
+    kick: "x - x -"
+    snare: "- - x -"
+
+song:
+  - verse
+  - verse
+  - chorus
+  - verse
+  - chorus x3
+```
+
+### YAML Keys
+
+| Key | Description |
+|---|---|
+| `bpm` | Tempo (overrides the BPM slider) |
+| `sections` | Named groups of instrument lines |
+| `song` | Ordered list of section names to play |
+
+### Repeats
+
+Append `x3` (or `*3`, `X3`) to repeat a section multiple times:
+
+```yaml
+song:
+  - intro
+  - verse x2
+  - chorus x4
+  - outro
+```
+
+## Mixer
+
+Click the mixer icon (sliders) in the transport bar to reveal per-instrument volume controls. Each slider adjusts volume in dB relative to the default mix.
+
 ## Tips
 
 - **Dynamics**: Alternate `c4` (soft) and `C4` (loud) for crescendo/decrescendo effects
@@ -94,3 +146,4 @@ hihat: x x x x x x x x
 - **Sharps/flats**: Use `#` for sharp, `b` for flat — `F#4`, `Bb3`, `Eb5`
 - **BPM range**: 40–240, adjustable in the transport bar
 - **Keyboard shortcut**: Ctrl+Enter (or Cmd+Enter) to play/stop
+- **YAML format**: Use `sections:` and `song:` for verse/chorus structure with repeats

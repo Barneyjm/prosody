@@ -2,6 +2,7 @@ export interface Example {
   name: string;
   bpm: number;
   text: string;
+  yaml?: boolean; // true if this example uses YAML format
 }
 
 export const EXAMPLES: Example[] = [
@@ -99,5 +100,43 @@ bass: C2 C2 C3 C2 F2 F2 G2 G2
 kick: x - x - x - x -
 snare: - - x - - - x -
 hihat: x x x x x x x x`,
+  },
+  {
+    name: "YAML Song (Verse/Chorus)",
+    bpm: 110,
+    yaml: true,
+    text: `bpm: 110
+
+sections:
+  verse:
+    piano: "[C4 E4 G4] - [C4 E4 G4] - [F4 A4 C5] - [F4 A4 C5] -"
+    synth: "E5 D5 C5 - G4 A4 G4 -"
+    bass: "C2 - C2 - F2 - F2 -"
+    kick: "x - x - x - x -"
+    hihat: "x x x x x x x x"
+
+  chorus:
+    piano: "[G4 B4 D5] - [G4 B4 D5] - [C4 E4 G4] - [C4 E4 G4] -"
+    synth: "G5 A5 B5 G5 E5 D5 C5 -"
+    bass: "G2 G2 G2 G2 C2 C2 C2 C2"
+    kick: "x - x - x - x -"
+    snare: "- - x - - - x -"
+    hihat: "x x x x x x x x"
+
+  bridge:
+    piano: "[A3 C4 E4] - [D4 F4 A4] - [E4 G#4 B4] - [A3 C4 E4] -"
+    synth: "A4 B4 C5 E5 D5 C5 B4 A4"
+    bass: "A1 - D2 - E2 - A1 -"
+    kick: "x - x - x - x -"
+    snare: "- - - - x - - -"
+
+song:
+  - verse
+  - verse
+  - chorus
+  - verse
+  - chorus
+  - bridge
+  - chorus x2`,
   },
 ];
