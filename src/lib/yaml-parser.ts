@@ -7,6 +7,19 @@ import YAML from "yaml";
  * ```yaml
  * bpm: 120
  *
+ * volumes:
+ *   bass: -5
+ *   hihat: -3
+ *
+ * instruments:
+ *   synth:
+ *     oscillator: fatsawtooth
+ *     attack: 0.05
+ *     release: 1.5
+ *   bass:
+ *     oscillator: square
+ *     filter: 300
+ *
  * sections:
  *   verse:
  *     piano: "[C4 E4 G4] - [F4 A4 C5] -"
@@ -29,11 +42,25 @@ import YAML from "yaml";
  *   - chorus x3
  * ```
  *
- * Returns plain-text notation compatible with the existing parser.
+ * Returns plain-text notation compatible with the existing parser,
+ * plus volume offsets and instrument configs for the audio engine.
  */
+
+/** Per-instrument synth parameter overrides from YAML */
+export interface InstrumentConfig {
+  oscillator?: string;  // e.g. "fatsawtooth", "triangle", "square", "sine", "sawtooth"
+  attack?: number;
+  decay?: number;
+  sustain?: number;
+  release?: number;
+  filter?: number;      // lowpass cutoff frequency in Hz
+  filterQ?: number;     // filter resonance
+}
 
 interface ProsodyYaml {
   bpm?: number;
+  volumes?: Record<string, number>;
+  instruments?: Record<string, InstrumentConfig>;
   sections?: Record<string, Record<string, string>>;
   song?: string[];
 }
@@ -41,6 +68,8 @@ interface ProsodyYaml {
 export interface YamlParseResult {
   text: string;
   bpm?: number;
+  volumes?: Record<string, number>;
+  instruments?: Record<string, InstrumentConfig>;
 }
 
 /**
@@ -48,8 +77,8 @@ export interface YamlParseResult {
  */
 export function isYamlFormat(input: string): boolean {
   const trimmed = input.trim();
-  // Quick heuristic: YAML song files contain "sections:" or "song:" at the start of a line
-  return /^(sections|song|bpm)\s*:/m.test(trimmed);
+  // Quick heuristic: YAML song files contain these keys at the start of a line
+  return /^(sections|song|bpm|volumes|instruments)\s*:/m.test(trimmed);
 }
 
 /**
@@ -63,6 +92,8 @@ export function parseYamlSong(input: string): YamlParseResult {
   }
 
   const bpm = doc.bpm;
+  const volumes = doc.volumes;
+  const instruments = doc.instruments;
   const sections = doc.sections ?? {};
   const songOrder = doc.song ?? [];
 
@@ -88,6 +119,8 @@ export function parseYamlSong(input: string): YamlParseResult {
   return {
     text: outputLines.join("\n"),
     bpm,
+    volumes,
+    instruments,
   };
 }
 

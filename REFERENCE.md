@@ -93,6 +93,19 @@ For longer compositions, use YAML to define reusable sections and arrange them i
 ```yaml
 bpm: 120
 
+volumes:
+  bass: -5
+  hihat: -3
+
+instruments:
+  synth:
+    oscillator: triangle
+    attack: 0.05
+    release: 1.5
+  bass:
+    oscillator: square
+    filter: 300
+
 sections:
   verse:
     piano: "[C4 E4 G4] - [F4 A4 C5] -"
@@ -119,8 +132,30 @@ song:
 | Key | Description |
 |---|---|
 | `bpm` | Tempo (overrides the BPM slider) |
+| `volumes` | Per-instrument volume offsets in dB (e.g. `bass: -5`) |
+| `instruments` | Per-instrument synth parameters (see below) |
 | `sections` | Named groups of instrument lines |
 | `song` | Ordered list of section names to play |
+
+### Instrument Parameters
+
+Under the `instruments` key you can configure per-instrument synthesis:
+
+```yaml
+instruments:
+  synth:
+    oscillator: fatsawtooth  # sine, triangle, square, sawtooth, fatsawtooth, etc.
+    attack: 0.03             # seconds
+    decay: 0.2
+    sustain: 0.4             # 0–1
+    release: 1.2             # seconds
+  bass:
+    oscillator: square
+    filter: 200              # lowpass cutoff in Hz
+    filterQ: 3               # filter resonance
+    attack: 0.01
+    sustain: 0.7
+```
 
 ### Repeats
 

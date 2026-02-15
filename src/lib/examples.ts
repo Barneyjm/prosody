@@ -107,6 +107,18 @@ hihat: x x x x x x x x`,
     yaml: true,
     text: `bpm: 110
 
+volumes:
+  bass: -3
+  hihat: -4
+
+instruments:
+  synth:
+    oscillator: triangle
+    attack: 0.05
+    release: 1.5
+  bass:
+    filter: 200
+
 sections:
   verse:
     piano: "[C4 E4 G4] - [C4 E4 G4] - [F4 A4 C5] - [F4 A4 C5] -"

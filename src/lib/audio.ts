@@ -1,5 +1,6 @@
 import * as Tone from "tone";
 import { parseAllLines, NoteEvent, parseInstrumentPrefix } from "./parser";
+import type { InstrumentConfig } from "./yaml-parser";
 
 const SALAMANDER_BASE_URL =
   "https://tonejs.github.io/audio/salamander/";
@@ -81,6 +82,9 @@ let onActiveNote: ActiveNoteCallback | null = null;
 
 // User volume offsets (dB, from UI sliders — 0 = default)
 let userVolumeOffsets: Record<string, number> = {};
+
+// YAML instrument config overrides
+let instrumentConfigs: Record<string, InstrumentConfig> = {};
 
 export function setActiveNoteCallback(cb: ActiveNoteCallback | null) {
   onActiveNote = cb;
@@ -171,29 +175,53 @@ export async function ensureSampler(): Promise<Tone.Sampler> {
   });
 }
 
+/** Build oscillator options from a config string like "fatsawtooth" or "triangle" */
+function oscType(name: string, cfg?: InstrumentConfig, defaults?: { type: string; count?: number; spread?: number }) {
+  const d = defaults ?? { type: "fatsawtooth" };
+  const type = cfg?.oscillator ?? d.type;
+  // "fat" oscillator types support count/spread
+  if (type.startsWith("fat")) {
+    return { type, count: d.count ?? 3, spread: d.spread ?? 20 } as unknown as Tone.OmniOscillatorOptions;
+  }
+  return { type } as unknown as Tone.OmniOscillatorOptions;
+}
+
 function ensureSynths() {
   if (!synthInst) {
     const gain = getInstrumentGain("synth");
-    // Richer synth: fat oscillator (detuned unison) instead of plain triangle
+    const cfg = instrumentConfigs["synth"];
     synthInst = new Tone.PolySynth(Tone.Synth).connect(gain);
     synthInst.set({
-      oscillator: { type: "fatsawtooth", count: 3, spread: 20 } as unknown as Tone.OmniOscillatorOptions,
-      envelope: { attack: 0.03, decay: 0.2, sustain: 0.4, release: 1.2 },
+      oscillator: oscType("synth", cfg, { type: "fatsawtooth", count: 3, spread: 20 }),
+      envelope: {
+        attack: cfg?.attack ?? 0.03,
+        decay: cfg?.decay ?? 0.2,
+        sustain: cfg?.sustain ?? 0.4,
+        release: cfg?.release ?? 1.2,
+      },
     });
     applyVolume("synth", synthInst);
   }
   if (!bassInst) {
     const gain = getInstrumentGain("bass");
+    const cfg = instrumentConfigs["bass"];
+    const filterFreq = cfg?.filter ?? 120;
+    const filterQ = cfg?.filterQ ?? 2;
     bassInst = new Tone.MonoSynth({
-      oscillator: { type: "fatsawtooth", count: 2, spread: 10 } as unknown as Tone.OmniOscillatorOptions,
-      filter: { Q: 2, type: "lowpass", rolloff: -24 },
-      envelope: { attack: 0.01, decay: 0.15, sustain: 0.7, release: 0.3 },
+      oscillator: oscType("bass", cfg, { type: "fatsawtooth", count: 2, spread: 10 }),
+      filter: { Q: filterQ, type: "lowpass", rolloff: -24 },
+      envelope: {
+        attack: cfg?.attack ?? 0.01,
+        decay: cfg?.decay ?? 0.15,
+        sustain: cfg?.sustain ?? 0.7,
+        release: cfg?.release ?? 0.3,
+      },
       filterEnvelope: {
         attack: 0.01,
         decay: 0.1,
         sustain: 0.3,
         release: 1.5,
-        baseFrequency: 120,
+        baseFrequency: filterFreq,
         octaves: 3.5,
       },
     }).connect(gain);
@@ -337,17 +365,31 @@ export function scheduleMusic(
   return { maxBeats };
 }
 
+/** Dispose synths so they're re-created with fresh configs */
+function disposeSynths() {
+  if (synthInst) { synthInst.dispose(); synthInst = null; }
+  if (bassInst) { bassInst.dispose(); bassInst = null; }
+}
+
 export async function startPlayback(
   text: string,
   bpm: number,
   loop: boolean,
-  volumeOffsets?: Record<string, number>
+  volumeOffsets?: Record<string, number>,
+  instConfigs?: Record<string, InstrumentConfig>
 ): Promise<{ maxBeats: number }> {
   await Tone.start();
 
   // Apply user volume offsets
   if (volumeOffsets) {
     userVolumeOffsets = { ...volumeOffsets };
+  }
+
+  // Apply instrument configs — dispose old synths so they're rebuilt
+  const newConfigs = instConfigs ?? {};
+  if (JSON.stringify(newConfigs) !== JSON.stringify(instrumentConfigs)) {
+    instrumentConfigs = newConfigs;
+    disposeSynths();
   }
 
   // Initialize instruments based on what's in the text
@@ -456,12 +498,14 @@ function playEventOffline(
 export async function renderOffline(
   text: string,
   bpm: number,
-  volumeOffsets?: Record<string, number>
+  volumeOffsets?: Record<string, number>,
+  instConfigs?: Record<string, InstrumentConfig>
 ): Promise<Blob> {
   const { lines, maxBeats } = parseAllLines(text);
   if (maxBeats === 0) throw new Error("Nothing to render");
 
   const offsets = volumeOffsets ?? userVolumeOffsets;
+  const configs = instConfigs ?? instrumentConfigs;
   const durationSeconds = (maxBeats * 60) / bpm + 0.5; // brief tail for release envelopes
   const instrumentsNeeded = detectInstruments(text);
 
@@ -524,25 +568,39 @@ export async function renderOffline(
     }
 
     if (instrumentsNeeded.has("synth")) {
+      const cfg = configs["synth"];
       inst.synth = new Tone.PolySynth(Tone.Synth).connect(getGain("synth"));
       inst.synth.set({
-        oscillator: { type: "fatsawtooth", count: 3, spread: 20 } as unknown as Tone.OmniOscillatorOptions,
-        envelope: { attack: 0.03, decay: 0.2, sustain: 0.4, release: 1.2 },
+        oscillator: oscType("synth", cfg, { type: "fatsawtooth", count: 3, spread: 20 }),
+        envelope: {
+          attack: cfg?.attack ?? 0.03,
+          decay: cfg?.decay ?? 0.2,
+          sustain: cfg?.sustain ?? 0.4,
+          release: cfg?.release ?? 1.2,
+        },
       });
       applyVol("synth", inst.synth);
     }
 
     if (instrumentsNeeded.has("bass")) {
+      const cfg = configs["bass"];
+      const filterFreq = cfg?.filter ?? 120;
+      const filterQ = cfg?.filterQ ?? 2;
       inst.bass = new Tone.MonoSynth({
-        oscillator: { type: "fatsawtooth", count: 2, spread: 10 } as unknown as Tone.OmniOscillatorOptions,
-        filter: { Q: 2, type: "lowpass", rolloff: -24 },
-        envelope: { attack: 0.01, decay: 0.15, sustain: 0.7, release: 0.3 },
+        oscillator: oscType("bass", cfg, { type: "fatsawtooth", count: 2, spread: 10 }),
+        filter: { Q: filterQ, type: "lowpass", rolloff: -24 },
+        envelope: {
+          attack: cfg?.attack ?? 0.01,
+          decay: cfg?.decay ?? 0.15,
+          sustain: cfg?.sustain ?? 0.7,
+          release: cfg?.release ?? 0.3,
+        },
         filterEnvelope: {
           attack: 0.01,
           decay: 0.1,
           sustain: 0.3,
           release: 1.5,
-          baseFrequency: 120,
+          baseFrequency: filterFreq,
           octaves: 3.5,
         },
       }).connect(getGain("bass"));

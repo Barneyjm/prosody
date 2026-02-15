@@ -116,12 +116,22 @@ export default function Home() {
 
   // Resolve YAML to flat notation, or pass through as-is
   const resolveText = useCallback(
-    (input: string): { resolved: string; resolvedBpm?: number } => {
+    (input: string) => {
       const yamlResult = tryParseYaml(input);
       if (yamlResult) {
-        return { resolved: yamlResult.text, resolvedBpm: yamlResult.bpm };
+        return {
+          resolved: yamlResult.text,
+          resolvedBpm: yamlResult.bpm,
+          resolvedVolumes: yamlResult.volumes,
+          resolvedInstruments: yamlResult.instruments,
+        };
       }
-      return { resolved: input };
+      return { resolved: input } as {
+        resolved: string;
+        resolvedBpm?: number;
+        resolvedVolumes?: Record<string, number>;
+        resolvedInstruments?: Record<string, import("@/lib/yaml-parser").InstrumentConfig>;
+      };
     },
     []
   );
@@ -142,10 +152,14 @@ export default function Home() {
           rafIdRef.current = requestAnimationFrame(flushActiveNotes);
         }
       });
-      const { resolved, resolvedBpm } = resolveText(text);
+      const { resolved, resolvedBpm, resolvedVolumes, resolvedInstruments } = resolveText(text);
       const effectiveBpm = resolvedBpm ?? bpm;
       if (resolvedBpm) setBpmState(resolvedBpm);
-      await audio.startPlayback(resolved, effectiveBpm, loop, volumes);
+      // YAML volumes merge with UI volumes (YAML takes precedence)
+      const effectiveVolumes = resolvedVolumes
+        ? { ...volumes, ...resolvedVolumes }
+        : volumes;
+      await audio.startPlayback(resolved, effectiveBpm, loop, effectiveVolumes, resolvedInstruments);
       setIsPlaying(true);
     } catch (err) {
       console.error("Playback error:", err);
@@ -215,9 +229,12 @@ export default function Home() {
     setDownloadStatus("rendering");
     try {
       const audio = await getAudio();
-      const { resolved, resolvedBpm } = resolveText(text);
+      const { resolved, resolvedBpm, resolvedVolumes, resolvedInstruments } = resolveText(text);
       const effectiveBpm = resolvedBpm ?? bpm;
-      const blob = await audio.renderOffline(resolved, effectiveBpm, volumes);
+      const effectiveVolumes = resolvedVolumes
+        ? { ...volumes, ...resolvedVolumes }
+        : volumes;
+      const blob = await audio.renderOffline(resolved, effectiveBpm, effectiveVolumes, resolvedInstruments);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
