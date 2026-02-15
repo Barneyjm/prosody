@@ -368,6 +368,14 @@ export default function Home() {
           <strong className="text-[var(--accent-green)]">Soft:</strong> c4
           (lowercase)
         </span>
+        <span>
+          <strong className="text-[var(--accent-blue)]">Dotted:</strong> C4.
+          (1.5 beats)
+        </span>
+        <span>
+          <strong className="text-[var(--accent-pink)]">Tied:</strong> C4~ ~
+          (sustain)
+        </span>
       </div>
 
       {/* Transport controls */}
