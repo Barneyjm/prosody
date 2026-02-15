@@ -5,8 +5,17 @@ import Editor from "@/components/Editor";
 import Transport from "@/components/Transport";
 import { compressToHash, decompressFromHash } from "@/lib/share";
 import { EXAMPLES } from "@/lib/examples";
+import { tryParseYaml } from "@/lib/yaml-parser";
 
 const DEFAULT_TEXT = EXAMPLES[0].text;
+const DEFAULT_VOLUMES: Record<string, number> = {
+  piano: 0,
+  synth: 0,
+  bass: 0,
+  kick: 0,
+  snare: 0,
+  hihat: 0,
+};
 
 interface ActiveNote {
   lineIndex: number;
@@ -23,9 +32,14 @@ export default function Home() {
   const [activeNotes, setActiveNotes] = useState<ActiveNote[]>([]);
   const [shareStatus, setShareStatus] = useState<"idle" | "copied" | "error">("idle");
   const [downloadStatus, setDownloadStatus] = useState<"idle" | "rendering" | "error">("idle");
+  const [volumes, setVolumes] = useState<Record<string, number>>(DEFAULT_VOLUMES);
   const audioRef = useRef<typeof import("@/lib/audio") | null>(null);
   const cleanupTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // --- Performance: batch active-note callbacks via a ref + rAF ---
+  const pendingNotesRef = useRef<Map<string, ActiveNote>>(new Map());
+  const rafIdRef = useRef<number | null>(null);
 
   // Load shared content from URL hash on mount
   useEffect(() => {
@@ -47,50 +61,112 @@ export default function Home() {
     return audioRef.current;
   }, []);
 
-  // Clean up stale active notes
+  // Flush batched active-note updates at ~60 fps via rAF
+  const flushActiveNotes = useCallback(() => {
+    const now = Date.now();
+    const pending = pendingNotesRef.current;
+    // Merge pending into state, drop stale entries
+    setActiveNotes((prev) => {
+      const merged = new Map<string, ActiveNote>();
+      for (const n of prev) {
+        if (now - n.timestamp < 300) {
+          merged.set(`${n.lineIndex}:${n.tokenIndex}`, n);
+        }
+      }
+      for (const [key, n] of pending) {
+        merged.set(key, n);
+      }
+      pending.clear();
+      return Array.from(merged.values());
+    });
+    rafIdRef.current = null;
+  }, []);
+
+  // Clean up stale active notes on a slower interval (no per-note setState)
   useEffect(() => {
     if (isPlaying) {
       cleanupTimerRef.current = setInterval(() => {
         const now = Date.now();
-        setActiveNotes((prev) =>
-          prev.filter((n) => now - n.timestamp < 300)
-        );
-      }, 100);
+        setActiveNotes((prev) => {
+          const filtered = prev.filter((n) => now - n.timestamp < 300);
+          return filtered.length === prev.length ? prev : filtered;
+        });
+      }, 200);
     } else {
       if (cleanupTimerRef.current) {
         clearInterval(cleanupTimerRef.current);
         cleanupTimerRef.current = null;
       }
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+      pendingNotesRef.current.clear();
       setActiveNotes([]);
     }
     return () => {
       if (cleanupTimerRef.current) {
         clearInterval(cleanupTimerRef.current);
       }
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
+      }
     };
-  }, [isPlaying]);
+  }, [isPlaying, flushActiveNotes]);
+
+  // Resolve YAML to flat notation, or pass through as-is
+  const resolveText = useCallback(
+    (input: string) => {
+      const yamlResult = tryParseYaml(input);
+      if (yamlResult) {
+        return {
+          resolved: yamlResult.text,
+          resolvedBpm: yamlResult.bpm,
+          resolvedVolumes: yamlResult.volumes,
+          resolvedInstruments: yamlResult.instruments,
+        };
+      }
+      return { resolved: input } as {
+        resolved: string;
+        resolvedBpm?: number;
+        resolvedVolumes?: Record<string, number>;
+        resolvedInstruments?: Record<string, import("@/lib/yaml-parser").InstrumentConfig>;
+      };
+    },
+    []
+  );
 
   const handlePlay = useCallback(async () => {
     setIsLoading(true);
     try {
       const audio = await getAudio();
       audio.setActiveNoteCallback((lineIndex, tokenIndex) => {
-        setActiveNotes((prev) => [
-          ...prev.filter(
-            (n) =>
-              !(n.lineIndex === lineIndex && n.tokenIndex === tokenIndex)
-          ),
-          { lineIndex, tokenIndex, timestamp: Date.now() },
-        ]);
+        const key = `${lineIndex}:${tokenIndex}`;
+        pendingNotesRef.current.set(key, {
+          lineIndex,
+          tokenIndex,
+          timestamp: Date.now(),
+        });
+        // Coalesce into a single rAF
+        if (!rafIdRef.current) {
+          rafIdRef.current = requestAnimationFrame(flushActiveNotes);
+        }
       });
-      await audio.startPlayback(text, bpm, loop);
+      const { resolved, resolvedBpm, resolvedVolumes, resolvedInstruments } = resolveText(text);
+      const effectiveBpm = resolvedBpm ?? bpm;
+      if (resolvedBpm) setBpmState(resolvedBpm);
+      // YAML volumes merge with UI volumes (YAML takes precedence)
+      const effectiveVolumes = resolvedVolumes
+        ? { ...volumes, ...resolvedVolumes }
+        : volumes;
+      await audio.startPlayback(resolved, effectiveBpm, loop, effectiveVolumes, resolvedInstruments);
       setIsPlaying(true);
     } catch (err) {
       console.error("Playback error:", err);
     } finally {
       setIsLoading(false);
     }
-  }, [text, bpm, loop, getAudio]);
+  }, [text, bpm, loop, volumes, getAudio, flushActiveNotes, resolveText]);
 
   const handleStop = useCallback(async () => {
     const audio = await getAudio();
@@ -114,6 +190,17 @@ export default function Home() {
   const handleLoopToggle = useCallback(() => {
     setLoop((prev) => !prev);
   }, []);
+
+  const handleVolumeChange = useCallback(
+    async (instrument: string, value: number) => {
+      setVolumes((prev) => ({ ...prev, [instrument]: value }));
+      if (isPlaying) {
+        const audio = await getAudio();
+        audio.setInstrumentVolume(instrument, value);
+      }
+    },
+    [isPlaying, getAudio]
+  );
 
   const handleShare = useCallback(async () => {
     try {
@@ -142,7 +229,12 @@ export default function Home() {
     setDownloadStatus("rendering");
     try {
       const audio = await getAudio();
-      const blob = await audio.renderOffline(text, bpm);
+      const { resolved, resolvedBpm, resolvedVolumes, resolvedInstruments } = resolveText(text);
+      const effectiveBpm = resolvedBpm ?? bpm;
+      const effectiveVolumes = resolvedVolumes
+        ? { ...volumes, ...resolvedVolumes }
+        : volumes;
+      const blob = await audio.renderOffline(resolved, effectiveBpm, effectiveVolumes, resolvedInstruments);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -155,7 +247,7 @@ export default function Home() {
       setDownloadStatus("error");
       setTimeout(() => setDownloadStatus("idle"), 2000);
     }
-  }, [text, bpm, getAudio]);
+  }, [text, bpm, volumes, getAudio, resolveText]);
 
   const handleFileUpload = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -253,7 +345,7 @@ export default function Home() {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".txt,.prosody,.text,text/plain"
+            accept=".txt,.prosody,.text,.yaml,.yml,text/plain"
             onChange={handleFileUpload}
             className="hidden"
           />
@@ -376,6 +468,10 @@ export default function Home() {
           <strong className="text-[var(--accent-pink)]">Tied:</strong> C4~ ~
           (sustain)
         </span>
+        <span>
+          <strong className="text-[var(--accent-orange)]">YAML:</strong>{" "}
+          sections + song order
+        </span>
       </div>
 
       {/* Transport controls */}
@@ -384,10 +480,12 @@ export default function Home() {
         isLoading={isLoading}
         loop={loop}
         bpm={bpm}
+        volumes={volumes}
         onPlay={handlePlay}
         onStop={handleStop}
         onLoopToggle={handleLoopToggle}
         onBpmChange={handleBpmChange}
+        onVolumeChange={handleVolumeChange}
       />
 
       {/* Editor */}

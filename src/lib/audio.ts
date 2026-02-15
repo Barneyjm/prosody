@@ -1,5 +1,6 @@
 import * as Tone from "tone";
 import { parseAllLines, NoteEvent, parseInstrumentPrefix } from "./parser";
+import type { InstrumentConfig } from "./yaml-parser";
 
 const SALAMANDER_BASE_URL =
   "https://tonejs.github.io/audio/salamander/";
@@ -44,6 +45,16 @@ export type ActiveNoteCallback = (
   tokenIndex: number
 ) => void;
 
+// Default instrument volumes in dB (balanced mix)
+const DEFAULT_INSTRUMENT_DB: Record<string, number> = {
+  piano: -8,
+  synth: -8,
+  bass: -12,
+  kick: -6,
+  snare: -7,
+  hihat: -10,
+};
+
 // Piano sampler
 let sampler: Tone.Sampler | null = null;
 let samplerLoaded = false;
@@ -57,15 +68,95 @@ let snareInst: Tone.NoiseSynth | null = null;
 let kickInst: Tone.MembraneSynth | null = null;
 let hihatInst: Tone.NoiseSynth | null = null;
 
+// Per-instrument gain nodes for volume control
+let instrumentGains: Record<string, Tone.Gain> = {};
+
+// Effects chain — shared bus
+let reverb: Tone.Reverb | null = null;
+let chorus: Tone.Chorus | null = null;
+let compressor: Tone.Compressor | null = null;
+let effectsReady = false;
+
 let parts: Tone.Part[] = [];
 let onActiveNote: ActiveNoteCallback | null = null;
+
+// User volume offsets (dB, from UI sliders — 0 = default)
+let userVolumeOffsets: Record<string, number> = {};
+
+// YAML instrument config overrides
+let instrumentConfigs: Record<string, InstrumentConfig> = {};
 
 export function setActiveNoteCallback(cb: ActiveNoteCallback | null) {
   onActiveNote = cb;
 }
 
+function ensureEffects() {
+  if (effectsReady) return;
+
+  // Master compressor to glue the mix
+  compressor = new Tone.Compressor({
+    threshold: -18,
+    ratio: 3,
+    attack: 0.01,
+    release: 0.15,
+  }).toDestination();
+
+  // Convolution-style reverb for depth
+  reverb = new Tone.Reverb({
+    decay: 2.2,
+    wet: 0.18,
+    preDelay: 0.01,
+  }).connect(compressor);
+
+  // Subtle chorus for warmth
+  chorus = new Tone.Chorus({
+    frequency: 1.5,
+    delayTime: 3.5,
+    depth: 0.4,
+    wet: 0.15,
+    spread: 180,
+  }).connect(reverb);
+  chorus.start();
+
+  effectsReady = true;
+}
+
+function getInstrumentGain(name: string): Tone.Gain {
+  if (instrumentGains[name]) return instrumentGains[name];
+
+  ensureEffects();
+
+  const gain = new Tone.Gain(1).connect(chorus!);
+  instrumentGains[name] = gain;
+  return gain;
+}
+
+function applyVolume(name: string, inst: { volume: { value: number } }) {
+  const base = DEFAULT_INSTRUMENT_DB[name] ?? -8;
+  const offset = userVolumeOffsets[name] ?? 0;
+  inst.volume.value = base + offset;
+}
+
+export function setInstrumentVolume(instrument: string, offsetDb: number) {
+  userVolumeOffsets[instrument] = offsetDb;
+
+  // Apply in real time to live instruments
+  const instMap: Record<string, { volume: { value: number } } | null> = {
+    piano: sampler,
+    synth: synthInst,
+    bass: bassInst,
+    kick: kickInst,
+    snare: snareInst,
+    hihat: hihatInst,
+  };
+  const inst = instMap[instrument];
+  if (inst) applyVolume(instrument, inst);
+}
+
 export async function ensureSampler(): Promise<Tone.Sampler> {
   if (sampler && samplerLoaded) return sampler;
+
+  const gain = getInstrumentGain("piano");
 
   return new Promise((resolve, reject) => {
     sampler = new Tone.Sampler({
@@ -79,60 +170,91 @@ export async function ensureSampler(): Promise<Tone.Sampler> {
         reject(err);
       },
       release: 1,
-    }).toDestination();
+    }).connect(gain);
+    applyVolume("piano", sampler!);
   });
+}
+
+/** Build oscillator options from a config string like "fatsawtooth" or "triangle" */
+function oscType(name: string, cfg?: InstrumentConfig, defaults?: { type: string; count?: number; spread?: number }) {
+  const d = defaults ?? { type: "fatsawtooth" };
+  const type = cfg?.oscillator ?? d.type;
+  // "fat" oscillator types support count/spread
+  if (type.startsWith("fat")) {
+    return { type, count: d.count ?? 3, spread: d.spread ?? 20 } as unknown as Tone.OmniOscillatorOptions;
+  }
+  return { type } as unknown as Tone.OmniOscillatorOptions;
 }
 
 function ensureSynths() {
   if (!synthInst) {
-    synthInst = new Tone.PolySynth(Tone.Synth).toDestination();
+    const gain = getInstrumentGain("synth");
+    const cfg = instrumentConfigs["synth"];
+    synthInst = new Tone.PolySynth(Tone.Synth).connect(gain);
     synthInst.set({
-      oscillator: { type: "triangle" },
-      envelope: { attack: 0.02, decay: 0.1, sustain: 0.3, release: 1 },
+      oscillator: oscType("synth", cfg, { type: "fatsawtooth", count: 3, spread: 20 }),
+      envelope: {
+        attack: cfg?.attack ?? 0.03,
+        decay: cfg?.decay ?? 0.2,
+        sustain: cfg?.sustain ?? 0.4,
+        release: cfg?.release ?? 1.2,
+      },
     });
-    synthInst.volume.value = -8;
+    applyVolume("synth", synthInst);
   }
   if (!bassInst) {
+    const gain = getInstrumentGain("bass");
+    const cfg = instrumentConfigs["bass"];
+    const filterFreq = cfg?.filter ?? 120;
+    const filterQ = cfg?.filterQ ?? 2;
     bassInst = new Tone.MonoSynth({
-      oscillator: { type: "sawtooth" },
-      filter: { Q: 1, type: "lowpass", rolloff: -24 },
-      envelope: { attack: 0.01, decay: 0.1, sustain: 0.9, release: 0.4 },
+      oscillator: oscType("bass", cfg, { type: "fatsawtooth", count: 2, spread: 10 }),
+      filter: { Q: filterQ, type: "lowpass", rolloff: -24 },
+      envelope: {
+        attack: cfg?.attack ?? 0.01,
+        decay: cfg?.decay ?? 0.15,
+        sustain: cfg?.sustain ?? 0.7,
+        release: cfg?.release ?? 0.3,
+      },
       filterEnvelope: {
         attack: 0.01,
-        decay: 0.06,
-        sustain: 0.5,
-        release: 2,
-        baseFrequency: 200,
-        octaves: 7,
+        decay: 0.1,
+        sustain: 0.3,
+        release: 1.5,
+        baseFrequency: filterFreq,
+        octaves: 3.5,
       },
-    }).toDestination();
-    bassInst.volume.value = -5;
+    }).connect(gain);
+    applyVolume("bass", bassInst);
   }
 }
 
 function ensurePercussion() {
   if (!snareInst) {
+    const gain = getInstrumentGain("snare");
     snareInst = new Tone.NoiseSynth({
       noise: { type: "pink" },
-      envelope: { attack: 0.001, decay: 0.15, sustain: 0.02, release: 0.1 },
-    }).toDestination();
-    snareInst.volume.value = -6;
+      envelope: { attack: 0.001, decay: 0.18, sustain: 0.02, release: 0.12 },
+    }).connect(gain);
+    applyVolume("snare", snareInst);
   }
   if (!kickInst) {
+    const gain = getInstrumentGain("kick");
     kickInst = new Tone.MembraneSynth({
-      pitchDecay: 0.05,
-      octaves: 10,
+      pitchDecay: 0.06,
+      octaves: 8,
       oscillator: { type: "sine" },
-      envelope: { attack: 0.001, decay: 0.4, sustain: 0.01, release: 1.4 },
-    }).toDestination();
-    kickInst.volume.value = -5;
+      envelope: { attack: 0.001, decay: 0.5, sustain: 0.01, release: 1.0 },
+    }).connect(gain);
+    applyVolume("kick", kickInst);
   }
   if (!hihatInst) {
+    const gain = getInstrumentGain("hihat");
     hihatInst = new Tone.NoiseSynth({
       noise: { type: "white" },
-      envelope: { attack: 0.001, decay: 0.05, sustain: 0 },
-    }).toDestination();
-    hihatInst.volume.value = -8;
+      envelope: { attack: 0.001, decay: 0.06, sustain: 0 },
+    }).connect(gain);
+    applyVolume("hihat", hihatInst);
   }
 }
 
@@ -243,12 +365,32 @@ export function scheduleMusic(
   return { maxBeats };
 }
 
+/** Dispose synths so they're re-created with fresh configs */
+function disposeSynths() {
+  if (synthInst) { synthInst.dispose(); synthInst = null; }
+  if (bassInst) { bassInst.dispose(); bassInst = null; }
+}
+
 export async function startPlayback(
   text: string,
   bpm: number,
-  loop: boolean
+  loop: boolean,
+  volumeOffsets?: Record<string, number>,
+  instConfigs?: Record<string, InstrumentConfig>
 ): Promise<{ maxBeats: number }> {
   await Tone.start();
+
+  // Apply user volume offsets
+  if (volumeOffsets) {
+    userVolumeOffsets = { ...volumeOffsets };
+  }
+
+  // Apply instrument configs — dispose old synths so they're rebuilt
+  const newConfigs = instConfigs ?? {};
+  if (JSON.stringify(newConfigs) !== JSON.stringify(instrumentConfigs)) {
+    instrumentConfigs = newConfigs;
+    disposeSynths();
+  }
 
   // Initialize instruments based on what's in the text
   const instrumentsNeeded = detectInstruments(text);
@@ -353,14 +495,55 @@ function playEventOffline(
   }
 }
 
-export async function renderOffline(text: string, bpm: number): Promise<Blob> {
+export async function renderOffline(
+  text: string,
+  bpm: number,
+  volumeOffsets?: Record<string, number>,
+  instConfigs?: Record<string, InstrumentConfig>
+): Promise<Blob> {
   const { lines, maxBeats } = parseAllLines(text);
   if (maxBeats === 0) throw new Error("Nothing to render");
 
+  const offsets = volumeOffsets ?? userVolumeOffsets;
+  const configs = instConfigs ?? instrumentConfigs;
   const durationSeconds = (maxBeats * 60) / bpm + 0.5; // brief tail for release envelopes
   const instrumentsNeeded = detectInstruments(text);
 
   const buffer = await Tone.Offline(async ({ transport }) => {
+    // Create effects chain inside offline context
+    const offComp = new Tone.Compressor({
+      threshold: -18,
+      ratio: 3,
+      attack: 0.01,
+      release: 0.15,
+    }).toDestination();
+
+    const offReverb = new Tone.Reverb({
+      decay: 2.2,
+      wet: 0.18,
+      preDelay: 0.01,
+    }).connect(offComp);
+
+    const offChorus = new Tone.Chorus({
+      frequency: 1.5,
+      delayTime: 3.5,
+      depth: 0.4,
+      wet: 0.15,
+      spread: 180,
+    }).connect(offReverb);
+    offChorus.start();
+
+    const getGain = (name: string) => {
+      const g = new Tone.Gain(1).connect(offChorus);
+      return g;
+    };
+
+    const applyVol = (name: string, inst: { volume: { value: number } }) => {
+      const base = DEFAULT_INSTRUMENT_DB[name] ?? -8;
+      const offset = offsets[name] ?? 0;
+      inst.volume.value = base + offset;
+    };
+
     const inst: OfflineInstruments = {
       sampler: null,
       synth: null,
@@ -379,60 +562,75 @@ export async function renderOffline(text: string, bpm: number): Promise<Blob> {
           onload: () => resolve(s),
           onerror: (err: Error) => reject(err),
           release: 1,
-        }).toDestination();
+        }).connect(getGain("piano"));
+        applyVol("piano", s);
       });
     }
 
     if (instrumentsNeeded.has("synth")) {
-      inst.synth = new Tone.PolySynth(Tone.Synth).toDestination();
+      const cfg = configs["synth"];
+      inst.synth = new Tone.PolySynth(Tone.Synth).connect(getGain("synth"));
       inst.synth.set({
-        oscillator: { type: "triangle" },
-        envelope: { attack: 0.02, decay: 0.1, sustain: 0.3, release: 1 },
+        oscillator: oscType("synth", cfg, { type: "fatsawtooth", count: 3, spread: 20 }),
+        envelope: {
+          attack: cfg?.attack ?? 0.03,
+          decay: cfg?.decay ?? 0.2,
+          sustain: cfg?.sustain ?? 0.4,
+          release: cfg?.release ?? 1.2,
+        },
       });
-      inst.synth.volume.value = -8;
+      applyVol("synth", inst.synth);
     }
 
     if (instrumentsNeeded.has("bass")) {
+      const cfg = configs["bass"];
+      const filterFreq = cfg?.filter ?? 120;
+      const filterQ = cfg?.filterQ ?? 2;
       inst.bass = new Tone.MonoSynth({
-        oscillator: { type: "sawtooth" },
-        filter: { Q: 1, type: "lowpass", rolloff: -24 },
-        envelope: { attack: 0.01, decay: 0.1, sustain: 0.9, release: 0.4 },
+        oscillator: oscType("bass", cfg, { type: "fatsawtooth", count: 2, spread: 10 }),
+        filter: { Q: filterQ, type: "lowpass", rolloff: -24 },
+        envelope: {
+          attack: cfg?.attack ?? 0.01,
+          decay: cfg?.decay ?? 0.15,
+          sustain: cfg?.sustain ?? 0.7,
+          release: cfg?.release ?? 0.3,
+        },
         filterEnvelope: {
           attack: 0.01,
-          decay: 0.06,
-          sustain: 0.5,
-          release: 2,
-          baseFrequency: 200,
-          octaves: 7,
+          decay: 0.1,
+          sustain: 0.3,
+          release: 1.5,
+          baseFrequency: filterFreq,
+          octaves: 3.5,
         },
-      }).toDestination();
-      inst.bass.volume.value = -5;
+      }).connect(getGain("bass"));
+      applyVol("bass", inst.bass);
     }
 
     if (instrumentsNeeded.has("snare")) {
       inst.snare = new Tone.NoiseSynth({
         noise: { type: "pink" },
-        envelope: { attack: 0.001, decay: 0.15, sustain: 0.02, release: 0.1 },
-      }).toDestination();
-      inst.snare.volume.value = -6;
+        envelope: { attack: 0.001, decay: 0.18, sustain: 0.02, release: 0.12 },
+      }).connect(getGain("snare"));
+      applyVol("snare", inst.snare);
     }
 
     if (instrumentsNeeded.has("kick")) {
       inst.kick = new Tone.MembraneSynth({
-        pitchDecay: 0.05,
-        octaves: 10,
+        pitchDecay: 0.06,
+        octaves: 8,
         oscillator: { type: "sine" },
-        envelope: { attack: 0.001, decay: 0.4, sustain: 0.01, release: 1.4 },
-      }).toDestination();
-      inst.kick.volume.value = -5;
+        envelope: { attack: 0.001, decay: 0.5, sustain: 0.01, release: 1.0 },
+      }).connect(getGain("kick"));
+      applyVol("kick", inst.kick);
     }
 
     if (instrumentsNeeded.has("hihat")) {
       inst.hihat = new Tone.NoiseSynth({
         noise: { type: "white" },
-        envelope: { attack: 0.001, decay: 0.05, sustain: 0 },
-      }).toDestination();
-      inst.hihat.volume.value = -8;
+        envelope: { attack: 0.001, decay: 0.06, sustain: 0 },
+      }).connect(getGain("hihat"));
+      applyVol("hihat", inst.hihat);
     }
 
     // Schedule all events on the offline transport
