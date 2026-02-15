@@ -285,6 +285,18 @@ export function stopPlayback() {
   if (synthInst) {
     synthInst.releaseAll();
   }
+  if (bassInst) {
+    bassInst.triggerRelease();
+  }
+  if (snareInst) {
+    snareInst.triggerRelease();
+  }
+  if (kickInst) {
+    kickInst.triggerRelease();
+  }
+  if (hihatInst) {
+    hihatInst.triggerRelease();
+  }
 }
 
 export function setBpm(bpm: number) {
