@@ -62,6 +62,7 @@ interface ProsodyYaml {
   bpm?: number;
   volumes?: Record<string, number>;
   instruments?: Record<string, InstrumentConfig>;
+  samples?: Record<string, string>;
   sections?: Record<string, Record<string, string>>;
   song?: string[];
 }
@@ -119,6 +120,16 @@ export function parseYamlSong(input: string): YamlParseResult {
   const sections = doc.sections ?? {};
   const songOrder = doc.song ?? [];
 
+  // Collect sample URL declarations from the `samples:` key, e.g.:
+  //   samples:
+  //     gong: https://tonejs.github.io/audio/berklee/gong_1.mp3
+  // These are emitted as flat text declaration lines so the audio engine
+  // picks them up via parseSampleDeclarations().
+  const sampleLines: string[] = [];
+  for (const [name, url] of Object.entries(doc.samples ?? {})) {
+    sampleLines.push(`${name}: ${url}`);
+  }
+
   // If no song order, just render all sections in document order
   const sectionNames =
     songOrder.length > 0 ? expandSongOrder(songOrder) : Object.keys(sections);
@@ -165,8 +176,8 @@ export function parseYamlSong(input: string): YamlParseResult {
     }
   }
 
-  // Emit exactly one line per instrument
-  const outputLines: string[] = [];
+  // Emit sample declaration lines first, then one line per instrument
+  const outputLines: string[] = [...sampleLines];
   for (const inst of allInstruments) {
     outputLines.push(`${inst}: ${instrumentPatterns[inst].filter(Boolean).join(" ")}`);
   }
