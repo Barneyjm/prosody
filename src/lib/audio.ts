@@ -75,7 +75,7 @@ let stringsInst: Tone.PolySynth | null = null;
 let padInst: Tone.PolySynth | null = null;
 let pluckInst: Tone.PolySynth | null = null;
 let organInst: Tone.PolySynth | null = null;
-let leadInst: Tone.MonoSynth | null = null;
+let leadInst: Tone.PolySynth | null = null;
 let bellInst: Tone.PolySynth | null = null;
 
 // Percussion instruments
@@ -323,25 +323,16 @@ function ensureExtendedSynths() {
   if (!leadInst) {
     const gain = getInstrumentGain("lead");
     const cfg = instrumentConfigs["lead"];
-    const filterFreq = cfg?.filter ?? 3000;
-    leadInst = new Tone.MonoSynth({
+    leadInst = new Tone.PolySynth(Tone.Synth).connect(gain);
+    leadInst.set({
       oscillator: oscType("lead", cfg, { type: "sawtooth" }),
-      filter: { Q: 1, type: "lowpass", rolloff: -12 },
       envelope: {
         attack: cfg?.attack ?? 0.01,
         decay: cfg?.decay ?? 0.1,
         sustain: cfg?.sustain ?? 0.8,
         release: cfg?.release ?? 0.3,
       },
-      filterEnvelope: {
-        attack: 0.01,
-        decay: 0.05,
-        sustain: 0.8,
-        release: 0.5,
-        baseFrequency: filterFreq,
-        octaves: 2,
-      },
-    }).connect(gain);
+    });
     applyVolume("lead", leadInst);
   }
   if (!bellInst) {
@@ -542,7 +533,7 @@ function playEvent(ev: NoteEvent, time: number, bpmValue: number) {
       if (organInst) organInst.triggerAttackRelease(ev.notes, durationSeconds, time, velocity);
       break;
     case "lead":
-      if (leadInst) leadInst.triggerAttackRelease(ev.notes[0], durationSeconds, time, velocity);
+      if (leadInst) leadInst.triggerAttackRelease(ev.notes, durationSeconds, time, velocity);
       break;
     case "bell":
       if (bellInst) bellInst.triggerAttackRelease(ev.notes, durationSeconds, time, velocity);
@@ -600,15 +591,32 @@ export function scheduleMusic(
     return `0:${beat}:0`;
   };
 
-  for (const line of lines) {
-    if (line.events.length === 0) continue;
+  // Instruments that use a monophonic synth and cannot play two notes at the
+  // exact same timestamp without Tone.js throwing a timeline ordering error.
+  const MONO_INSTRUMENTS = new Set(["bass"]);
 
-    const partEvents: { time: string; event: NoteEvent }[] = line.events.map(
-      (ev) => ({
-        time: beatToTime(ev.beat),
-        event: ev,
-      })
-    );
+  // Merge all events for the same instrument into a single Part.
+  // This avoids having multiple Parts start at t=0 for the same instrument.
+  const byInstrument = new Map<string, { time: string; event: NoteEvent }[]>();
+  for (const line of lines) {
+    for (const ev of line.events) {
+      if (!byInstrument.has(ev.instrument)) byInstrument.set(ev.instrument, []);
+      byInstrument.get(ev.instrument)!.push({ time: beatToTime(ev.beat), event: ev });
+    }
+  }
+
+  for (const [instrument, evList] of byInstrument) {
+    if (evList.length === 0) continue;
+
+    // Sort ascending so Tone.Part sees events in time order.
+    evList.sort((a, b) => a.event.beat - b.event.beat);
+
+    // For monophonic instruments, deduplicate same-beat events (keep the last
+    // declaration at each beat) to prevent the "Start time must be strictly
+    // greater than previous start time" error.
+    const partEvents = MONO_INSTRUMENTS.has(instrument)
+      ? [...new Map(evList.map((e) => [e.event.beat, e])).values()]
+      : evList;
 
     const part = new Tone.Part((time, value: { event: NoteEvent }) => {
       const ev = value.event;
@@ -725,7 +733,7 @@ export function stopPlayback() {
   organInst?.releaseAll();
   bellInst?.releaseAll();
   bassInst?.triggerRelease();
-  leadInst?.triggerRelease();
+  leadInst?.releaseAll();
   snareInst?.triggerRelease();
   kickInst?.triggerRelease();
   hihatInst?.triggerRelease();
@@ -759,7 +767,7 @@ interface OfflineInstruments {
   pad:      Tone.PolySynth | null;
   pluck:    Tone.PolySynth | null;
   organ:    Tone.PolySynth | null;
-  lead:     Tone.MonoSynth | null;
+  lead:     Tone.PolySynth | null;
   bell:     Tone.PolySynth | null;
   snare:    Tone.NoiseSynth | null;
   kick:     Tone.MembraneSynth | null;
@@ -802,7 +810,7 @@ function playEventOffline(
       inst.organ?.triggerAttackRelease(ev.notes, durationSeconds, time, velocity);
       break;
     case "lead":
-      inst.lead?.triggerAttackRelease(ev.notes[0], durationSeconds, time, velocity);
+      inst.lead?.triggerAttackRelease(ev.notes, durationSeconds, time, velocity);
       break;
     case "bell":
       inst.bell?.triggerAttackRelease(ev.notes, durationSeconds, time, velocity);
@@ -975,12 +983,11 @@ export async function renderOffline(
 
     if (instrumentsNeeded.has("lead")) {
       const cfg = configs["lead"];
-      inst.lead = new Tone.MonoSynth({
+      inst.lead = new Tone.PolySynth(Tone.Synth).connect(getGain("lead"));
+      inst.lead.set({
         oscillator: oscType("lead", cfg, { type: "sawtooth" }),
-        filter: { Q: 1, type: "lowpass", rolloff: -12 },
         envelope: { attack: cfg?.attack ?? 0.01, decay: cfg?.decay ?? 0.1, sustain: cfg?.sustain ?? 0.8, release: cfg?.release ?? 0.3 },
-        filterEnvelope: { attack: 0.01, decay: 0.05, sustain: 0.8, release: 0.5, baseFrequency: cfg?.filter ?? 3000, octaves: 2 },
-      }).connect(getGain("lead"));
+      });
       applyVol("lead", inst.lead);
     }
 
