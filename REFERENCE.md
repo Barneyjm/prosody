@@ -188,8 +188,24 @@ song:
 | `bpm` | Tempo (overrides the BPM slider) |
 | `volumes` | Per-instrument volume offsets in dB (e.g. `bass: -5`) |
 | `instruments` | Per-instrument synth parameters (see below) |
+| `samples` | URL-based sample channels (see below) |
 | `sections` | Named groups of instrument lines |
 | `song` | Ordered list of section names to play |
+
+### Custom Samples in YAML
+
+Declare URL-based sample channels under `samples:`, then use them as instrument lines in your sections:
+
+```yaml
+samples:
+  gong: https://tonejs.github.io/audio/berklee/gong_1.mp3
+  kick: https://tonejs.github.io/audio/drum-samples/CR78/kick.mp3
+
+sections:
+  verse:
+    gong: "x - - - - - - -"
+    kick: "x - x - x - x -"
+```
 
 ### Instrument Parameters
 
@@ -233,7 +249,7 @@ URL-based custom sample channels appear highlighted in orange.
 
 - **Dynamics**: Alternate `c4` (soft) and `C4` (loud) for crescendo/decrescendo effects
 - **Multiple lines per instrument**: You can have two `piano:` lines for melody + chords separately
-- **Bass/lead are mono**: Only the first note plays if you write a chord on these lines
+- **Bass is mono**: Only the first note plays if you write a chord on a `bass:` line
 - **Sharps/flats**: Use `#` for sharp, `b` for flat — `F#4`, `Bb3`, `Eb5`
 - **BPM range**: 40–240, adjustable in the transport bar
 - **Keyboard shortcut**: Ctrl+Enter (or Cmd+Enter) to play/stop
