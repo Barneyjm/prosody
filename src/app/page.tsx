@@ -1,20 +1,18 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Editor from "@/components/Editor";
 import Transport from "@/components/Transport";
 import { compressToHash, decompressFromHash } from "@/lib/share";
 import { EXAMPLES } from "@/lib/examples";
 import { tryParseYaml } from "@/lib/yaml-parser";
+import { parseInstrumentPrefix } from "@/lib/parser";
 
 const DEFAULT_TEXT = EXAMPLES[0].text;
 const DEFAULT_VOLUMES: Record<string, number> = {
-  piano: 0,
-  synth: 0,
-  bass: 0,
-  kick: 0,
-  snare: 0,
-  hihat: 0,
+  piano: 0, synth: 0, bass: 0,
+  strings: 0, pad: 0, pluck: 0, organ: 0, lead: 0, bell: 0,
+  kick: 0, snare: 0, hihat: 0, clap: 0, tom: 0, cymbal: 0,
 };
 
 interface ActiveNote {
@@ -33,9 +31,42 @@ export default function Home() {
   const [shareStatus, setShareStatus] = useState<"idle" | "copied" | "error">("idle");
   const [downloadStatus, setDownloadStatus] = useState<"idle" | "rendering" | "error">("idle");
   const [volumes, setVolumes] = useState<Record<string, number>>(DEFAULT_VOLUMES);
+  const [sampleErrors, setSampleErrors] = useState<string[]>([]);
   const audioRef = useRef<typeof import("@/lib/audio") | null>(null);
   const cleanupTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Detect which instruments are used in the current text (for mixer display).
+  // Expand YAML first, then two-pass scan:
+  //   pass 1 — collect URL-declared custom sample names
+  //   pass 2 — collect any line whose instrument is either a built-in
+  //             (present in DEFAULT_VOLUMES, which is static) or a declared
+  //             custom sample name
+  // Never reads the mutable INSTRUMENTS registry so the memoised result is
+  // correct even before playback starts.
+  const activeInstruments = useMemo(() => {
+    const yamlResult = tryParseYaml(text);
+    const flatText = yamlResult ? yamlResult.text : text;
+    const URL_RE = /^(https?:\/\/|blob:)\S+$/;
+
+    // Pass 1: sample declaration lines → channel names
+    const customNames = new Set<string>();
+    for (const rawLine of flatText.split("\n")) {
+      const { instrument, content } = parseInstrumentPrefix(rawLine.trimEnd());
+      if (URL_RE.test(content.trim())) customNames.add(instrument);
+    }
+
+    // Pass 2: collect used built-ins + used custom channels
+    const used = new Set<string>();
+    for (const rawLine of flatText.split("\n")) {
+      const { instrument, content } = parseInstrumentPrefix(rawLine.trimEnd());
+      if (!content.trim()) continue;
+      if (Object.prototype.hasOwnProperty.call(DEFAULT_VOLUMES, instrument) || customNames.has(instrument)) {
+        used.add(instrument);
+      }
+    }
+    return Array.from(used);
+  }, [text]);
 
   // --- Performance: batch active-note callbacks via a ref + rAF ---
   const pendingNotesRef = useRef<Map<string, ActiveNote>>(new Map());
@@ -159,7 +190,8 @@ export default function Home() {
       const effectiveVolumes = resolvedVolumes
         ? { ...volumes, ...resolvedVolumes }
         : volumes;
-      await audio.startPlayback(resolved, effectiveBpm, loop, effectiveVolumes, resolvedInstruments);
+      const { failedSamples } = await audio.startPlayback(resolved, effectiveBpm, loop, effectiveVolumes, resolvedInstruments);
+      setSampleErrors(failedSamples);
       setIsPlaying(true);
     } catch (err) {
       console.error("Playback error:", err);
@@ -396,6 +428,29 @@ export default function Home() {
               ? "Failed"
               : "Share"}
           </button>
+          <a
+            href="/reference"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors border border-[var(--border-color)] hover:border-[var(--accent-purple)] text-[var(--text-secondary)] hover:text-[var(--accent-purple)] bg-[var(--bg-tertiary)]"
+            title="Quick reference — or paste the page into your LLM to get started"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            Reference
+          </a>
           <button
             onClick={handleDownload}
             disabled={downloadStatus === "rendering"}
@@ -439,7 +494,7 @@ export default function Home() {
       <div className="px-6 py-2 text-xs text-[var(--text-muted)] border-b border-[var(--border-color)] bg-[var(--bg-primary)] flex gap-6 flex-wrap">
         <span>
           <strong className="text-[var(--accent-pink)]">Instruments:</strong>{" "}
-          piano: synth: bass: kick: snare: hihat:
+          piano: synth: bass: strings: pad: pluck: organ: lead: bell: kick: snare: hihat: clap: tom: cymbal:
         </span>
         <span>
           <strong className="text-[var(--accent-blue)]">Notes:</strong> C4 D#5
@@ -469,6 +524,10 @@ export default function Home() {
           (sustain)
         </span>
         <span>
+          <strong className="text-[var(--accent-orange)]">Samples:</strong>{" "}
+          name: https://url.com/sound.mp3
+        </span>
+        <span>
           <strong className="text-[var(--accent-orange)]">YAML:</strong>{" "}
           sections + song order
         </span>
@@ -481,12 +540,30 @@ export default function Home() {
         loop={loop}
         bpm={bpm}
         volumes={volumes}
+        activeInstruments={activeInstruments}
         onPlay={handlePlay}
         onStop={handleStop}
         onLoopToggle={handleLoopToggle}
         onBpmChange={handleBpmChange}
         onVolumeChange={handleVolumeChange}
       />
+
+      {/* Sample load error banner */}
+      {sampleErrors.length > 0 && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-[var(--accent-red)]/10 border-b border-[var(--accent-red)]/30 text-sm">
+          <span className="text-[var(--accent-red)] font-medium">Sample load failed:</span>
+          <span className="text-[var(--text-secondary)]">
+            {sampleErrors.map((n) => <code key={n} className="font-mono">{n}</code>).reduce((a, b) => <>{a}, {b}</>)}
+          </span>
+          <span className="text-[var(--text-muted)] ml-1">— check the URL and try again</span>
+          <button
+            onClick={() => setSampleErrors([])}
+            className="ml-auto text-[var(--text-muted)] hover:text-[var(--text-primary)] text-xs"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Editor */}
       <main className="flex-1 flex flex-col p-4 overflow-hidden">
