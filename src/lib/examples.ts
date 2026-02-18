@@ -102,6 +102,41 @@ snare: - - x - - - x -
 hihat: x x x x x x x x`,
   },
   {
+    name: "Strings & Pluck",
+    bpm: 88,
+    text: `strings: [C4 E4 G4] - [A3 C4 E4] - [F3 A3 C4] - [G3 B3 D4] -
+pad: C3 - A2 - F2 - G2 -
+pluck: C5 E5 G5 E5 A4 C5 E5 C5
+pluck: F4 A4 C5 A4 G4 B4 D5 B4
+bass: C2 - A1 - F1 - G1 -
+kick: x - - - x - - -
+tom: - - x - - - x -
+clap: - - x - - - x -
+hihat: x x x x x x x x`,
+  },
+  {
+    name: "Organ & Lead",
+    bpm: 100,
+    text: `organ: [C4 E4 G4 B4] - - - [F4 A4 C5 E5] - - -
+lead: E5 D5 C5 B4 A4 G4 F4 E4
+lead: C5~ ~ E5 G5 F5~ ~ - -
+bass: C2 - G1 - F1 - G1 -
+kick: x - x - x - x -
+snare: - - x - - - x -
+cymbal: x - - - x - - -
+hihat: x x x x x x x x`,
+  },
+  {
+    name: "Bell Garden",
+    bpm: 76,
+    text: `bell: C5 - E5 - G5 - E5 -
+bell: G4 - B4 - D5 - B4 -
+bell: E4 - G4 - C5 - G4 -
+pad: [C3 E3 G3] - - - [G2 B2 D3] - - -
+strings: C4~ ~ ~ ~ G3~ ~ ~ ~
+pluck: c5 e5 g5 c6 b4 d5 g4 b4`,
+  },
+  {
     name: "YAML Song (Verse/Chorus)",
     bpm: 210,
     yaml: true,

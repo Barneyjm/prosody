@@ -1,20 +1,18 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Editor from "@/components/Editor";
 import Transport from "@/components/Transport";
 import { compressToHash, decompressFromHash } from "@/lib/share";
 import { EXAMPLES } from "@/lib/examples";
 import { tryParseYaml } from "@/lib/yaml-parser";
+import { parseInstrumentPrefix, INSTRUMENTS } from "@/lib/parser";
 
 const DEFAULT_TEXT = EXAMPLES[0].text;
 const DEFAULT_VOLUMES: Record<string, number> = {
-  piano: 0,
-  synth: 0,
-  bass: 0,
-  kick: 0,
-  snare: 0,
-  hihat: 0,
+  piano: 0, synth: 0, bass: 0,
+  strings: 0, pad: 0, pluck: 0, organ: 0, lead: 0, bell: 0,
+  kick: 0, snare: 0, hihat: 0, clap: 0, tom: 0, cymbal: 0,
 };
 
 interface ActiveNote {
@@ -36,6 +34,21 @@ export default function Home() {
   const audioRef = useRef<typeof import("@/lib/audio") | null>(null);
   const cleanupTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Detect which instruments are used in the current text (for mixer display).
+  // Expand YAML to flat text first so structural keywords (bpm, volumes, etc.) are excluded.
+  const activeInstruments = useMemo(() => {
+    const yamlResult = tryParseYaml(text);
+    const flatText = yamlResult ? yamlResult.text : text;
+    const used = new Set<string>();
+    for (const line of flatText.split("\n")) {
+      const { instrument, content } = parseInstrumentPrefix(line);
+      const isBuiltIn = instrument in INSTRUMENTS;
+      const isUrlSample = /^(https?:\/\/|blob:)\S+$/.test(content.trim());
+      if (isBuiltIn || isUrlSample) used.add(instrument);
+    }
+    return Array.from(used);
+  }, [text]);
 
   // --- Performance: batch active-note callbacks via a ref + rAF ---
   const pendingNotesRef = useRef<Map<string, ActiveNote>>(new Map());
@@ -439,7 +452,7 @@ export default function Home() {
       <div className="px-6 py-2 text-xs text-[var(--text-muted)] border-b border-[var(--border-color)] bg-[var(--bg-primary)] flex gap-6 flex-wrap">
         <span>
           <strong className="text-[var(--accent-pink)]">Instruments:</strong>{" "}
-          piano: synth: bass: kick: snare: hihat:
+          piano: synth: bass: strings: pad: pluck: organ: lead: bell: kick: snare: hihat: clap: tom: cymbal:
         </span>
         <span>
           <strong className="text-[var(--accent-blue)]">Notes:</strong> C4 D#5
@@ -469,6 +482,10 @@ export default function Home() {
           (sustain)
         </span>
         <span>
+          <strong className="text-[var(--accent-orange)]">Samples:</strong>{" "}
+          name: https://url.com/sound.mp3
+        </span>
+        <span>
           <strong className="text-[var(--accent-orange)]">YAML:</strong>{" "}
           sections + song order
         </span>
@@ -481,6 +498,7 @@ export default function Home() {
         loop={loop}
         bpm={bpm}
         volumes={volumes}
+        activeInstruments={activeInstruments}
         onPlay={handlePlay}
         onStop={handleStop}
         onLoopToggle={handleLoopToggle}

@@ -4,14 +4,54 @@
 
 Prefix any line with an instrument name. Default is `piano` if omitted.
 
-| Prefix | Type | Notes |
+### Pitched
+
+| Prefix | Sound | Notes |
 |---|---|---|
 | `piano:` | Sampled piano | Polyphonic, range A0–C8 |
-| `synth:` | Triangle wave | Polyphonic |
-| `bass:` | Sawtooth synth | Monophonic (one note at a time) |
-| `kick:` | Kick drum | Use `x` to trigger |
-| `snare:` | Snare drum | Use `x` to trigger |
-| `hihat:` | Hi-hat | Use `x` to trigger |
+| `synth:` | Fat sawtooth | Polyphonic |
+| `bass:` | Filtered sawtooth | Monophonic |
+| `strings:` | Bowed strings | Polyphonic, slow attack |
+| `pad:` | Ambient pad | Polyphonic, very slow attack |
+| `pluck:` | Plucked string | Polyphonic, instant attack, decays away |
+| `organ:` | Square wave organ | Polyphonic, instant start/stop |
+| `lead:` | Lead synth | Monophonic, bright filter |
+| `bell:` | Bell / glockenspiel | Polyphonic, long decay |
+
+### Percussion
+
+| Prefix | Sound | Trigger |
+|---|---|---|
+| `kick:` | Kick drum | `x` |
+| `snare:` | Snare drum | `x` |
+| `hihat:` | Hi-hat | `x` |
+| `clap:` | Hand clap | `x` |
+| `tom:` | Tom drum | `x` |
+| `cymbal:` | Cymbal / ride | `x` |
+
+## Custom Samples (URL)
+
+Load any remote audio file as a named channel by declaring its URL on a line by itself:
+
+```
+mydrums: https://example.com/drums.wav
+mydrums: x x - x x - x -
+```
+
+The declaration line (`name: url`) is silent — it just registers the sample. Subsequent lines with the same name play the sample.
+
+- Trigger with `x` for percussion-style playback
+- Use note names (e.g. `C4 E4 G4`) to pitch-shift the sample relative to C4
+- Any audio format the browser supports works (MP3, WAV, OGG, FLAC…)
+- The channel appears in the mixer once it's declared
+
+```
+kick2: https://cdn.example.com/808kick.mp3
+bass_loop: https://cdn.example.com/bass.wav
+
+kick2: x - - x - - x -
+bass_loop: C2 - G1 - F1 - G1 -
+```
 
 ## Notes
 
@@ -171,14 +211,18 @@ song:
 
 ## Mixer
 
-Click the mixer icon (sliders) in the transport bar to reveal per-instrument volume controls. Each slider adjusts volume in dB relative to the default mix.
+Click the mixer icon (sliders) in the transport bar to reveal per-instrument volume controls. The mixer only shows channels that are active in the current composition. Each slider adjusts volume in dB relative to the default mix.
+
+URL-based custom sample channels appear highlighted in orange.
 
 ## Tips
 
 - **Dynamics**: Alternate `c4` (soft) and `C4` (loud) for crescendo/decrescendo effects
 - **Multiple lines per instrument**: You can have two `piano:` lines for melody + chords separately
-- **Bass is mono**: Only the first note plays if you accidentally write a chord on a bass line
+- **Bass/lead are mono**: Only the first note plays if you write a chord on these lines
 - **Sharps/flats**: Use `#` for sharp, `b` for flat — `F#4`, `Bb3`, `Eb5`
 - **BPM range**: 40–240, adjustable in the transport bar
 - **Keyboard shortcut**: Ctrl+Enter (or Cmd+Enter) to play/stop
+- **Slow instruments**: `strings:` and `pad:` have slow attacks — leave sustain time so notes bloom
+- **Bell arpeggios**: `bell:` with no sustain creates natural decay; great for melodic patterns
 - **YAML format**: Use `sections:` and `song:` for verse/chorus structure with repeats

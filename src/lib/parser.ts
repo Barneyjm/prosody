@@ -46,13 +46,62 @@ export interface NoteEvent {
 
 // Supported instruments
 export const INSTRUMENTS: Record<string, { type: "pitched" | "percussion"; label: string }> = {
-  piano: { type: "pitched", label: "Piano" },
-  synth: { type: "pitched", label: "Synth" },
-  bass: { type: "pitched", label: "Bass" },
-  kick: { type: "percussion", label: "Kick" },
-  snare: { type: "percussion", label: "Snare" },
-  hihat: { type: "percussion", label: "Hi-Hat" },
+  piano:   { type: "pitched",    label: "Piano" },
+  synth:   { type: "pitched",    label: "Synth" },
+  bass:    { type: "pitched",    label: "Bass" },
+  strings: { type: "pitched",    label: "Strings" },
+  pad:     { type: "pitched",    label: "Pad" },
+  pluck:   { type: "pitched",    label: "Pluck" },
+  organ:   { type: "pitched",    label: "Organ" },
+  lead:    { type: "pitched",    label: "Lead" },
+  bell:    { type: "pitched",    label: "Bell" },
+  kick:    { type: "percussion", label: "Kick" },
+  snare:   { type: "percussion", label: "Snare" },
+  hihat:   { type: "percussion", label: "Hi-Hat" },
+  clap:    { type: "percussion", label: "Clap" },
+  tom:     { type: "percussion", label: "Tom" },
+  cymbal:  { type: "percussion", label: "Cymbal" },
 };
+
+/** Register a custom sample channel so the parser recognises it as an instrument prefix. */
+export function registerCustomInstrument(name: string, type: "pitched" | "percussion" = "percussion") {
+  INSTRUMENTS[name] = { type, label: name };
+}
+
+/** Remove a custom sample channel from the parser registry. */
+export function unregisterCustomInstrument(name: string) {
+  delete INSTRUMENTS[name];
+}
+
+/** Regex that matches a URL on a sample-declaration line (http/https/blob). */
+const SAMPLE_URL_RE = /^(https?:\/\/|blob:)\S+$/;
+
+/** Returns true if the line content (after stripping the instrument prefix) is a URL. */
+export function isSampleDeclaration(content: string): boolean {
+  return SAMPLE_URL_RE.test(content.trim());
+}
+
+/**
+ * Scan text for sample declaration lines of the form:
+ *   channelname: https://example.com/sound.mp3
+ * Returns unique {name, url} pairs.
+ */
+export function parseSampleDeclarations(text: string): { name: string; url: string }[] {
+  const seen = new Set<string>();
+  const results: { name: string; url: string }[] = [];
+  for (const line of text.split("\n")) {
+    const match = line.match(/^(\w+):\s*((https?:\/\/|blob:)\S+)$/);
+    if (match) {
+      const name = match[1].toLowerCase();
+      const url = match[2];
+      if (!seen.has(name)) {
+        seen.add(name);
+        results.push({ name, url });
+      }
+    }
+  }
+  return results;
+}
 
 // Regex for a single note: C#4. or c4~ etc.
 const NOTE_REGEX = /^([A-Ga-g])([#b]?)(\d)?(\.)?(~)?$/;
@@ -63,7 +112,7 @@ export function parseInstrumentPrefix(line: string): {
   prefixLength: number;
 } {
   const match = line.match(/^(\w+):\s*/);
-  if (match && match[1].toLowerCase() in INSTRUMENTS) {
+  if (match) {
     return {
       instrument: match[1].toLowerCase(),
       content: line.slice(match[0].length),
@@ -184,6 +233,12 @@ export function parseLine(
   lineIndex: number
 ): { tokens: Token[]; events: NoteEvent[]; instrument: string; prefixLength: number } {
   const { instrument, content, prefixLength } = parseInstrumentPrefix(line);
+
+  // Sample declaration lines (e.g. "mydrums: https://...") produce no note events
+  if (isSampleDeclaration(content)) {
+    return { tokens: [], events: [], instrument, prefixLength };
+  }
+
   const tokens = tokenize(content);
   const events: NoteEvent[] = [];
   let beat = 0;
