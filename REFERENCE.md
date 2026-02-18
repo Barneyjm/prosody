@@ -34,24 +34,38 @@ Prefix any line with an instrument name. Default is `piano` if omitted.
 Load any remote audio file as a named channel by declaring its URL on a line by itself:
 
 ```
-mydrums: https://example.com/drums.wav
-mydrums: x x - x x - x -
+# Declare the sample (silent line — just registers the channel)
+gong: https://tonejs.github.io/audio/berklee/gong_1.mp3
+# Use it like any other instrument
+gong: x - - - x - - -
 ```
 
-The declaration line (`name: url`) is silent — it just registers the sample. Subsequent lines with the same name play the sample.
+The declaration line is silent — it just registers the sample. Subsequent lines with the same name play the sample.
 
 - Trigger with `x` for percussion-style playback
-- Use note names (e.g. `C4 E4 G4`) to pitch-shift the sample relative to C4
+- Use note names to pitch-shift the sample relative to C4 base pitch
 - Any audio format the browser supports works (MP3, WAV, OGG, FLAC…)
-- The channel appears in the mixer once it's declared
+- The channel appears in the mixer (orange faders) once it's declared
 
-```
-kick2: https://cdn.example.com/808kick.mp3
-bass_loop: https://cdn.example.com/bass.wav
+### Free sample library (Tone.js CDN)
 
-kick2: x - - x - - x -
-bass_loop: C2 - G1 - F1 - G1 -
+These are all publicly hosted and work without sign-up:
+
+**Drum kits** — CR78, KPR77, R8, Techno, LINN, Stark, Kit3, Kit8…
 ```
+kick: https://tonejs.github.io/audio/drum-samples/CR78/kick.mp3
+snare: https://tonejs.github.io/audio/drum-samples/CR78/snare.mp3
+hihat: https://tonejs.github.io/audio/drum-samples/CR78/hihat.mp3
+tom1: https://tonejs.github.io/audio/drum-samples/CR78/tom1.mp3
+```
+
+**Berklee sound library** (800+ MP3s: percussion, voice, SFX…)
+```
+gong: https://tonejs.github.io/audio/berklee/gong_1.mp3
+chime: https://tonejs.github.io/audio/berklee/chime_1.mp3
+```
+
+Full list: `https://github.com/Tonejs/audio`
 
 ## Notes
 

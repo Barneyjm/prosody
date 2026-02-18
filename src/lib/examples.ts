@@ -102,6 +102,21 @@ snare: - - x - - - x -
 hihat: x x x x x x x x`,
   },
   {
+    name: "808 Drum Samples",
+    bpm: 95,
+    text: `kick808: https://tonejs.github.io/audio/drum-samples/CR78/kick.mp3
+snare808: https://tonejs.github.io/audio/drum-samples/CR78/snare.mp3
+hat808: https://tonejs.github.io/audio/drum-samples/CR78/hihat.mp3
+gong: https://tonejs.github.io/audio/berklee/gong_1.mp3
+
+kick808: x - - x - - x -
+snare808: - - x - - - x -
+hat808: x x x x x x x x
+gong: x - - - - - - -
+bass: C2 - - C2 G1 - - G1
+pluck: C4 E4 G4 E4 C4 G4 E4 C4`,
+  },
+  {
     name: "Strings & Pluck",
     bpm: 88,
     text: `strings: [C4 E4 G4] - [A3 C4 E4] - [F3 A3 C4] - [G3 B3 D4] -

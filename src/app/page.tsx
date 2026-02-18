@@ -31,6 +31,7 @@ export default function Home() {
   const [shareStatus, setShareStatus] = useState<"idle" | "copied" | "error">("idle");
   const [downloadStatus, setDownloadStatus] = useState<"idle" | "rendering" | "error">("idle");
   const [volumes, setVolumes] = useState<Record<string, number>>(DEFAULT_VOLUMES);
+  const [sampleErrors, setSampleErrors] = useState<string[]>([]);
   const audioRef = useRef<typeof import("@/lib/audio") | null>(null);
   const cleanupTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -172,7 +173,8 @@ export default function Home() {
       const effectiveVolumes = resolvedVolumes
         ? { ...volumes, ...resolvedVolumes }
         : volumes;
-      await audio.startPlayback(resolved, effectiveBpm, loop, effectiveVolumes, resolvedInstruments);
+      const { failedSamples } = await audio.startPlayback(resolved, effectiveBpm, loop, effectiveVolumes, resolvedInstruments);
+      setSampleErrors(failedSamples);
       setIsPlaying(true);
     } catch (err) {
       console.error("Playback error:", err);
@@ -505,6 +507,23 @@ export default function Home() {
         onBpmChange={handleBpmChange}
         onVolumeChange={handleVolumeChange}
       />
+
+      {/* Sample load error banner */}
+      {sampleErrors.length > 0 && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-[var(--accent-red)]/10 border-b border-[var(--accent-red)]/30 text-sm">
+          <span className="text-[var(--accent-red)] font-medium">Sample load failed:</span>
+          <span className="text-[var(--text-secondary)]">
+            {sampleErrors.map((n) => <code key={n} className="font-mono">{n}</code>).reduce((a, b) => <>{a}, {b}</>)}
+          </span>
+          <span className="text-[var(--text-muted)] ml-1">— check the URL and try again</span>
+          <button
+            onClick={() => setSampleErrors([])}
+            className="ml-auto text-[var(--text-muted)] hover:text-[var(--text-primary)] text-xs"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Editor */}
       <main className="flex-1 flex flex-col p-4 overflow-hidden">

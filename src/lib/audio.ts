@@ -431,11 +431,30 @@ export function getSamplerLoadState(): boolean {
  * Already-loaded samples with the same URL are skipped.
  * Channels whose URL changed are re-loaded.
  */
-export async function loadUrlSamples(text: string): Promise<void> {
+/**
+ * Loads URL-declared sample channels from the text.
+ * Returns names of any channels that failed to load so the caller can warn the user.
+ */
+export async function loadUrlSamples(text: string): Promise<string[]> {
   const declarations = parseSampleDeclarations(text);
-  if (declarations.length === 0) return;
 
-  const loaders: Promise<void>[] = [];
+  // Purge channels whose URL was removed from the text
+  const activeNames = new Set(declarations.map((d) => d.name));
+  for (const name of Object.keys(urlSampleRegistry)) {
+    if (!activeNames.has(name)) {
+      urlSampleRegistry[name].player.dispose();
+      delete urlSampleRegistry[name];
+      unregisterCustomInstrument(name);
+      if (instrumentGains[name]) {
+        instrumentGains[name].dispose();
+        delete instrumentGains[name];
+      }
+    }
+  }
+
+  if (declarations.length === 0) return [];
+
+  const loaders: Promise<{ name: string; ok: boolean }>[] = [];
 
   for (const { name, url } of declarations) {
     if (urlSampleRegistry[name]?.url === url) continue; // already loaded
@@ -454,35 +473,25 @@ export async function loadUrlSamples(text: string): Promise<void> {
     const gain = getInstrumentGain(name);
 
     loaders.push(
-      new Promise<void>((resolve, reject) => {
+      new Promise<{ name: string; ok: boolean }>((resolve) => {
         const player = new Tone.Player({
           url,
           onload: () => {
             urlSampleRegistry[name] = { url, player };
             applyVolume(name, player);
-            resolve();
+            resolve({ name, ok: true });
           },
-          onerror: (err: Error) => reject(err),
+          onerror: (err: Error) => {
+            console.warn(`[prosody] Failed to load sample "${name}" from ${url}:`, err);
+            resolve({ name, ok: false });
+          },
         }).connect(gain);
       })
     );
   }
 
-  // Purge channels whose URL was removed from the text
-  const activeNames = new Set(declarations.map((d) => d.name));
-  for (const name of Object.keys(urlSampleRegistry)) {
-    if (!activeNames.has(name)) {
-      urlSampleRegistry[name].player.dispose();
-      delete urlSampleRegistry[name];
-      unregisterCustomInstrument(name);
-      if (instrumentGains[name]) {
-        instrumentGains[name].dispose();
-        delete instrumentGains[name];
-      }
-    }
-  }
-
-  await Promise.all(loaders);
+  const results = await Promise.all(loaders);
+  return results.filter((r) => !r.ok).map((r) => r.name);
 }
 
 export function getUrlSampleNames(): string[] {
@@ -651,11 +660,11 @@ export async function startPlayback(
   loop: boolean,
   volumeOffsets?: Record<string, number>,
   instConfigs?: Record<string, InstrumentConfig>
-): Promise<{ maxBeats: number }> {
+): Promise<{ maxBeats: number; failedSamples: string[] }> {
   await Tone.start();
 
-  // Load any URL-based sample declarations in the text
-  await loadUrlSamples(text);
+  // Load any URL-based sample declarations in the text; collect failures
+  const failedSamples = await loadUrlSamples(text);
 
   // Apply user volume offsets
   if (volumeOffsets) {
@@ -699,7 +708,7 @@ export async function startPlayback(
   const result = scheduleMusic(text, loop);
 
   transport.start();
-  return result;
+  return { ...result, failedSamples };
 }
 
 export function stopPlayback() {

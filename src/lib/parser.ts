@@ -78,7 +78,7 @@ const SAMPLE_URL_RE = /^(https?:\/\/|blob:)\S+$/;
 
 /** Returns true if the line content (after stripping the instrument prefix) is a URL. */
 export function isSampleDeclaration(content: string): boolean {
-  return SAMPLE_URL_RE.test(content.trim());
+  return SAMPLE_URL_RE.test(content.trimEnd());
 }
 
 /**
@@ -89,7 +89,8 @@ export function isSampleDeclaration(content: string): boolean {
 export function parseSampleDeclarations(text: string): { name: string; url: string }[] {
   const seen = new Set<string>();
   const results: { name: string; url: string }[] = [];
-  for (const line of text.split("\n")) {
+  for (const rawLine of text.split("\n")) {
+    const line = rawLine.trimEnd(); // strip \r and trailing whitespace
     const match = line.match(/^(\w+):\s*((https?:\/\/|blob:)\S+)$/);
     if (match) {
       const name = match[1].toLowerCase();
