@@ -38,8 +38,21 @@ body {
   color: var(--text-primary);
   font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", "Consolas",
     monospace;
+  -webkit-text-size-adjust: 100%;
 }
 
 ::selection {
   background: rgba(88, 166, 255, 0.3);
+}
+
+/* Use dvh where supported to handle mobile browser chrome */
+@supports (height: 100dvh) {
+  .h-screen-safe {
+    height: 100dvh;
+  }
+}
+@supports not (height: 100dvh) {
+  .h-screen-safe {
+    height: 100vh;
+  }
 }

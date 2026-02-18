@@ -83,12 +83,12 @@ export default function Transport({
 
   return (
     <div className="border-t border-[var(--border-color)] bg-[var(--bg-secondary)]">
-      <div className="flex items-center gap-4 px-4 py-3">
+      <div className="flex items-center gap-2 sm:gap-4 px-3 sm:px-4 py-2 sm:py-3 flex-wrap">
         {/* Play/Stop */}
         <button
           onClick={isPlaying ? onStop : onPlay}
           disabled={isLoading}
-          className={`flex items-center justify-center w-10 h-10 rounded-full transition-colors ${
+          className={`flex items-center justify-center w-10 h-10 rounded-full transition-colors flex-shrink-0 ${
             isLoading
               ? "bg-[var(--text-muted)] cursor-wait"
               : isPlaying
@@ -103,7 +103,7 @@ export default function Transport({
         {/* Loop toggle */}
         <button
           onClick={onLoopToggle}
-          className={`flex items-center justify-center w-8 h-8 rounded transition-colors ${
+          className={`flex items-center justify-center w-8 h-8 rounded transition-colors flex-shrink-0 ${
             loop
               ? "text-[var(--accent-blue)] bg-[var(--accent-blue)]/15"
               : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
@@ -116,7 +116,7 @@ export default function Transport({
         {/* Mixer toggle */}
         <button
           onClick={() => setShowMixer((prev) => !prev)}
-          className={`flex items-center justify-center w-8 h-8 rounded transition-colors ${
+          className={`flex items-center justify-center w-8 h-8 rounded transition-colors flex-shrink-0 ${
             showMixer
               ? "text-[var(--accent-purple)] bg-[var(--accent-purple)]/15"
               : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
@@ -127,8 +127,8 @@ export default function Transport({
         </button>
 
         {/* BPM control */}
-        <div className="flex items-center gap-3 ml-auto">
-          <label className="text-sm text-[var(--text-secondary)]" htmlFor="bpm">BPM</label>
+        <div className="flex items-center gap-2 sm:gap-3 ml-auto">
+          <label className="text-xs sm:text-sm text-[var(--text-secondary)]" htmlFor="bpm">BPM</label>
           <input
             id="bpm"
             type="range"
@@ -136,7 +136,7 @@ export default function Transport({
             max="240"
             value={bpm}
             onChange={(e) => onBpmChange(parseInt(e.target.value, 10))}
-            className="w-32 accent-[var(--accent-blue)]"
+            className="w-20 sm:w-32 accent-[var(--accent-blue)]"
           />
           <input
             type="number"
@@ -154,11 +154,11 @@ export default function Transport({
 
       {/* Mixer panel */}
       {showMixer && (
-        <div className="px-4 py-3 border-t border-[var(--border-color)] bg-[var(--bg-tertiary)]">
+        <div className="px-3 sm:px-4 py-3 border-t border-[var(--border-color)] bg-[var(--bg-tertiary)]">
           {builtInActive.length === 0 && customActive.length === 0 ? (
             <p className="text-xs text-[var(--text-muted)]">No instruments in the current composition.</p>
           ) : (
-            <div className="flex items-end gap-5 flex-wrap">
+            <div className="flex items-end gap-3 sm:gap-5 flex-wrap">
               <span className="text-xs text-[var(--text-muted)] self-center mr-1">Mix</span>
 
               {/* Built-in instrument faders */}
