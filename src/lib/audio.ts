@@ -506,6 +506,17 @@ function detectInstruments(text: string): Set<string> {
   return instruments;
 }
 
+/** Pitch-shift a Tone.Player relative to C4 and start it at the given time. */
+function triggerSamplePlayer(player: Tone.Player, note: string | undefined, time: number): void {
+  if (note && note !== "C4") {
+    const semitones = Tone.Frequency(note).toMidi() - Tone.Frequency("C4").toMidi();
+    player.playbackRate = Math.pow(2, semitones / 12);
+  } else {
+    player.playbackRate = 1;
+  }
+  player.start(time);
+}
+
 function playEvent(ev: NoteEvent, time: number, bpmValue: number) {
   const velocity = ev.soft ? 0.4 : 0.8;
   const durationSeconds = (60 / bpmValue) * ev.duration;
@@ -513,14 +524,7 @@ function playEvent(ev: NoteEvent, time: number, bpmValue: number) {
   // URL sample registry takes priority — allows samples: to override built-in instruments
   const urlEntry = urlSampleRegistry[ev.instrument];
   if (urlEntry) {
-    const { player } = urlEntry;
-    if (ev.notes[0] && ev.notes[0] !== "C4") {
-      const semitones = Tone.Frequency(ev.notes[0]).toMidi() - Tone.Frequency("C4").toMidi();
-      player.playbackRate = Math.pow(2, semitones / 12);
-    } else {
-      player.playbackRate = 1;
-    }
-    player.start(time);
+    triggerSamplePlayer(urlEntry.player, ev.notes[0], time);
     return;
   }
 
@@ -790,13 +794,7 @@ function playEventOffline(
   // Custom sample players take priority over built-in synthesizers
   const customPlayer = inst.custom[ev.instrument];
   if (customPlayer) {
-    if (ev.notes[0] && ev.notes[0] !== "C4") {
-      const semitones = Tone.Frequency(ev.notes[0]).toMidi() - Tone.Frequency("C4").toMidi();
-      customPlayer.playbackRate = Math.pow(2, semitones / 12);
-    } else {
-      customPlayer.playbackRate = 1;
-    }
-    customPlayer.start(time);
+    triggerSamplePlayer(customPlayer, ev.notes[0], time);
     return;
   }
 
