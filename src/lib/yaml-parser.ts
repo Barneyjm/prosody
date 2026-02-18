@@ -99,7 +99,7 @@ function getSectionBeats(section: Record<string, string>): number {
 /** Generate a string of N rest tokens to pad a silent section. */
 function generateRests(beats: number): string {
   const count = Math.round(beats);
-  if (count <= 0) return "-";
+  if (count <= 0) return "";
   return Array(count).fill("-").join(" ");
 }
 
@@ -168,7 +168,7 @@ export function parseYamlSong(input: string): YamlParseResult {
   // Emit exactly one line per instrument
   const outputLines: string[] = [];
   for (const inst of allInstruments) {
-    outputLines.push(`${inst}: ${instrumentPatterns[inst].join(" ")}`);
+    outputLines.push(`${inst}: ${instrumentPatterns[inst].filter(Boolean).join(" ")}`);
   }
 
   return {
