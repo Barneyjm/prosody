@@ -6,7 +6,7 @@ import Transport from "@/components/Transport";
 import { compressToHash, decompressFromHash } from "@/lib/share";
 import { EXAMPLES } from "@/lib/examples";
 import { tryParseYaml } from "@/lib/yaml-parser";
-import { parseInstrumentPrefix, INSTRUMENTS } from "@/lib/parser";
+import { parseInstrumentPrefix } from "@/lib/parser";
 
 const DEFAULT_TEXT = EXAMPLES[0].text;
 const DEFAULT_VOLUMES: Record<string, number> = {
@@ -37,16 +37,33 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Detect which instruments are used in the current text (for mixer display).
-  // Expand YAML to flat text first so structural keywords (bpm, volumes, etc.) are excluded.
+  // Expand YAML first, then two-pass scan:
+  //   pass 1 — collect URL-declared custom sample names
+  //   pass 2 — collect any line whose instrument is either a built-in
+  //             (present in DEFAULT_VOLUMES, which is static) or a declared
+  //             custom sample name
+  // Never reads the mutable INSTRUMENTS registry so the memoised result is
+  // correct even before playback starts.
   const activeInstruments = useMemo(() => {
     const yamlResult = tryParseYaml(text);
     const flatText = yamlResult ? yamlResult.text : text;
+    const URL_RE = /^(https?:\/\/|blob:)\S+$/;
+
+    // Pass 1: sample declaration lines → channel names
+    const customNames = new Set<string>();
+    for (const rawLine of flatText.split("\n")) {
+      const { instrument, content } = parseInstrumentPrefix(rawLine.trimEnd());
+      if (URL_RE.test(content.trim())) customNames.add(instrument);
+    }
+
+    // Pass 2: collect used built-ins + used custom channels
     const used = new Set<string>();
-    for (const line of flatText.split("\n")) {
-      const { instrument, content } = parseInstrumentPrefix(line);
-      const isBuiltIn = instrument in INSTRUMENTS;
-      const isUrlSample = /^(https?:\/\/|blob:)\S+$/.test(content.trim());
-      if (isBuiltIn || isUrlSample) used.add(instrument);
+    for (const rawLine of flatText.split("\n")) {
+      const { instrument, content } = parseInstrumentPrefix(rawLine.trimEnd());
+      if (!content.trim()) continue;
+      if (Object.prototype.hasOwnProperty.call(DEFAULT_VOLUMES, instrument) || customNames.has(instrument)) {
+        used.add(instrument);
+      }
     }
     return Array.from(used);
   }, [text]);
