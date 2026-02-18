@@ -1,4 +1,5 @@
 import YAML from "yaml";
+import { parseLine } from "./parser";
 
 /**
  * YAML song format for Prosody.
@@ -81,6 +82,27 @@ export function isYamlFormat(input: string): boolean {
   return /^(sections|song|bpm|volumes|instruments)\s*:/m.test(trimmed);
 }
 
+/** Count the total beats in a section by parsing each instrument line. */
+function getSectionBeats(section: Record<string, string>): number {
+  let maxBeats = 0;
+  for (const [inst, pattern] of Object.entries(section)) {
+    const { events } = parseLine(`${inst}: ${pattern}`, 0);
+    if (events.length > 0) {
+      const last = events[events.length - 1];
+      const beats = last.beat + last.duration;
+      if (beats > maxBeats) maxBeats = beats;
+    }
+  }
+  return maxBeats;
+}
+
+/** Generate a string of N rest tokens to pad a silent section. */
+function generateRests(beats: number): string {
+  const count = Math.round(beats);
+  if (count <= 0) return "";
+  return Array(count).fill("-").join(" ");
+}
+
 /**
  * Parse a YAML song definition into flat text notation.
  */
@@ -101,19 +123,52 @@ export function parseYamlSong(input: string): YamlParseResult {
   const sectionNames =
     songOrder.length > 0 ? expandSongOrder(songOrder) : Object.keys(sections);
 
-  // Collect all instrument lines across all referenced sections
-  const outputLines: string[] = [];
+  // Pre-compute beat counts for each unique section
+  const sectionBeatCounts: Record<string, number> = {};
+  for (const [name, section] of Object.entries(sections)) {
+    sectionBeatCounts[name] = getSectionBeats(section);
+  }
+
+  // Collect all instruments referenced across all sections in the song
+  const allInstruments: string[] = [];
+  const seenInstruments = new Set<string>();
+  for (const sectionName of sectionNames) {
+    const section = sections[sectionName];
+    if (!section) continue;
+    for (const inst of Object.keys(section)) {
+      if (!seenInstruments.has(inst)) {
+        seenInstruments.add(inst);
+        allInstruments.push(inst);
+      }
+    }
+  }
+
+  // Build one concatenated pattern per instrument spanning the whole song.
+  // Sections where an instrument is absent are padded with rests so beat
+  // positions stay aligned across all instruments.
+  const instrumentPatterns: Record<string, string[]> = {};
+  for (const inst of allInstruments) {
+    instrumentPatterns[inst] = [];
+  }
 
   for (const sectionName of sectionNames) {
     const section = sections[sectionName];
-    if (!section) {
-      // Might be a raw text line passed through
-      continue;
-    }
+    if (!section) continue;
+    const beats = sectionBeatCounts[sectionName] ?? 0;
 
-    for (const [instrument, pattern] of Object.entries(section)) {
-      outputLines.push(`${instrument}: ${pattern}`);
+    for (const inst of allInstruments) {
+      if (section[inst] !== undefined) {
+        instrumentPatterns[inst].push(section[inst]);
+      } else {
+        instrumentPatterns[inst].push(generateRests(beats));
+      }
     }
+  }
+
+  // Emit exactly one line per instrument
+  const outputLines: string[] = [];
+  for (const inst of allInstruments) {
+    outputLines.push(`${inst}: ${instrumentPatterns[inst].filter(Boolean).join(" ")}`);
   }
 
   return {

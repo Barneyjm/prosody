@@ -103,9 +103,9 @@ hihat: x x x x x x x x`,
   },
   {
     name: "YAML Song (Verse/Chorus)",
-    bpm: 110,
+    bpm: 210,
     yaml: true,
-    text: `bpm: 110
+    text: `bpm: 210
 
 volumes:
   bass: -3
