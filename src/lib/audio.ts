@@ -510,6 +510,20 @@ function playEvent(ev: NoteEvent, time: number, bpmValue: number) {
   const velocity = ev.soft ? 0.4 : 0.8;
   const durationSeconds = (60 / bpmValue) * ev.duration;
 
+  // URL sample registry takes priority — allows samples: to override built-in instruments
+  const urlEntry = urlSampleRegistry[ev.instrument];
+  if (urlEntry) {
+    const { player } = urlEntry;
+    if (ev.notes[0] && ev.notes[0] !== "C4") {
+      const semitones = Tone.Frequency(ev.notes[0]).toMidi() - Tone.Frequency("C4").toMidi();
+      player.playbackRate = Math.pow(2, semitones / 12);
+    } else {
+      player.playbackRate = 1;
+    }
+    player.start(time);
+    return;
+  }
+
   switch (ev.instrument) {
     case "piano":
       if (sampler) sampler.triggerAttackRelease(ev.notes, durationSeconds, time, velocity);
@@ -556,20 +570,6 @@ function playEvent(ev: NoteEvent, time: number, bpmValue: number) {
     case "cymbal":
       if (cymbalInst) cymbalInst.triggerAttackRelease("16n", time, velocity);
       break;
-    default: {
-      // URL-based sample channel — support hit (x) and note-based pitch-shifting
-      const entry = urlSampleRegistry[ev.instrument];
-      if (entry) {
-        const { player } = entry;
-        if (ev.notes[0] && ev.notes[0] !== "C4") {
-          const semitones = Tone.Frequency(ev.notes[0]).toMidi() - Tone.Frequency("C4").toMidi();
-          player.playbackRate = Math.pow(2, semitones / 12);
-        } else {
-          player.playbackRate = 1;
-        }
-        player.start(time);
-      }
-    }
   }
 }
 
@@ -787,6 +787,19 @@ function playEventOffline(
   const velocity = ev.soft ? 0.4 : 0.8;
   const durationSeconds = (60 / bpmValue) * ev.duration;
 
+  // Custom sample players take priority over built-in synthesizers
+  const customPlayer = inst.custom[ev.instrument];
+  if (customPlayer) {
+    if (ev.notes[0] && ev.notes[0] !== "C4") {
+      const semitones = Tone.Frequency(ev.notes[0]).toMidi() - Tone.Frequency("C4").toMidi();
+      customPlayer.playbackRate = Math.pow(2, semitones / 12);
+    } else {
+      customPlayer.playbackRate = 1;
+    }
+    customPlayer.start(time);
+    return;
+  }
+
   switch (ev.instrument) {
     case "piano":
       inst.sampler?.triggerAttackRelease(ev.notes, durationSeconds, time, velocity);
@@ -833,18 +846,6 @@ function playEventOffline(
     case "cymbal":
       inst.cymbal?.triggerAttackRelease("16n", time, velocity);
       break;
-    default: {
-      const player = inst.custom[ev.instrument];
-      if (player) {
-        if (ev.notes[0] && ev.notes[0] !== "C4") {
-          const semitones = Tone.Frequency(ev.notes[0]).toMidi() - Tone.Frequency("C4").toMidi();
-          player.playbackRate = Math.pow(2, semitones / 12);
-        } else {
-          player.playbackRate = 1;
-        }
-        player.start(time);
-      }
-    }
   }
 }
 
