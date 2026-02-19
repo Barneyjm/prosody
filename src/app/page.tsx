@@ -342,19 +342,26 @@ export default function Home() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isPlaying, handlePlay, handleStop]);
 
+  const handleClear = useCallback(() => {
+    setText("");
+    if (isPlaying) {
+      handleStop();
+    }
+  }, [isPlaying, handleStop]);
+
   return (
-    <div className="h-screen flex flex-col">
+    <div className="h-screen-safe flex flex-col" style={{ height: "100dvh" }}>
       {/* Header */}
-      <header className="flex items-center justify-between px-6 py-3 border-b border-[var(--border-color)] bg-[var(--bg-secondary)]">
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-bold tracking-tight text-[var(--text-primary)]">
+      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-3 sm:px-6 py-2 sm:py-3 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] gap-2">
+        <div className="flex items-center justify-between sm:justify-start gap-3">
+          <h1 className="text-lg sm:text-xl font-bold tracking-tight text-[var(--text-primary)]">
             Prosody
           </h1>
-          <span className="text-xs text-[var(--text-muted)]">
+          <span className="hidden sm:inline text-xs text-[var(--text-muted)]">
             Write music in plain text
           </span>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
           <select
             onChange={(e) => {
               const idx = parseInt(e.target.value, 10);
@@ -362,7 +369,7 @@ export default function Home() {
               e.target.value = "";
             }}
             defaultValue=""
-            className="px-3 py-1.5 rounded text-xs border border-[var(--border-color)] hover:border-[var(--accent-purple)] text-[var(--text-secondary)] bg-[var(--bg-tertiary)] outline-none cursor-pointer"
+            className="px-2 sm:px-3 py-1.5 rounded text-xs border border-[var(--border-color)] hover:border-[var(--accent-purple)] text-[var(--text-secondary)] bg-[var(--bg-tertiary)] outline-none cursor-pointer min-w-0"
             title="Load an example"
           >
             <option value="" disabled>
@@ -383,7 +390,7 @@ export default function Home() {
           />
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors border border-[var(--border-color)] hover:border-[var(--accent-purple)] text-[var(--text-secondary)] hover:text-[var(--accent-purple)] bg-[var(--bg-tertiary)]"
+            className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded text-xs transition-colors border border-[var(--border-color)] hover:border-[var(--accent-purple)] text-[var(--text-secondary)] hover:text-[var(--accent-purple)] bg-[var(--bg-tertiary)]"
             title="Open a text file"
           >
             <svg
@@ -401,11 +408,11 @@ export default function Home() {
               <line x1="12" y1="18" x2="12" y2="12" />
               <line x1="9" y1="15" x2="15" y2="15" />
             </svg>
-            Open
+            <span className="hidden sm:inline">Open</span>
           </button>
           <button
             onClick={handleShare}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors border border-[var(--border-color)] hover:border-[var(--accent-blue)] text-[var(--text-secondary)] hover:text-[var(--accent-blue)] bg-[var(--bg-tertiary)]"
+            className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded text-xs transition-colors border border-[var(--border-color)] hover:border-[var(--accent-blue)] text-[var(--text-secondary)] hover:text-[var(--accent-blue)] bg-[var(--bg-tertiary)]"
             title="Share a link to this text"
           >
             <svg
@@ -422,17 +429,19 @@ export default function Home() {
               <polyline points="16 6 12 2 8 6" />
               <line x1="12" y1="2" x2="12" y2="15" />
             </svg>
-            {shareStatus === "copied"
-              ? "Shared!"
-              : shareStatus === "error"
-              ? "Failed"
-              : "Share"}
+            <span className="hidden sm:inline">
+              {shareStatus === "copied"
+                ? "Shared!"
+                : shareStatus === "error"
+                ? "Failed"
+                : "Share"}
+            </span>
           </button>
           <a
             href="/reference"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors border border-[var(--border-color)] hover:border-[var(--accent-purple)] text-[var(--text-secondary)] hover:text-[var(--accent-purple)] bg-[var(--bg-tertiary)]"
+            className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded text-xs transition-colors border border-[var(--border-color)] hover:border-[var(--accent-purple)] text-[var(--text-secondary)] hover:text-[var(--accent-purple)] bg-[var(--bg-tertiary)]"
             title="Quick reference — or paste the page into your LLM to get started"
           >
             <svg
@@ -449,12 +458,12 @@ export default function Home() {
               <line x1="12" y1="8" x2="12" y2="12" />
               <line x1="12" y1="16" x2="12.01" y2="16" />
             </svg>
-            Reference
+            <span className="hidden sm:inline">Reference</span>
           </a>
           <button
             onClick={handleDownload}
             disabled={downloadStatus === "rendering"}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors border border-[var(--border-color)] hover:border-[var(--accent-green)] text-[var(--text-secondary)] hover:text-[var(--accent-green)] bg-[var(--bg-tertiary)] disabled:opacity-50"
+            className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded text-xs transition-colors border border-[var(--border-color)] hover:border-[var(--accent-green)] text-[var(--text-secondary)] hover:text-[var(--accent-green)] bg-[var(--bg-tertiary)] disabled:opacity-50"
             title="Download as WAV file"
           >
             <svg
@@ -471,13 +480,15 @@ export default function Home() {
               <polyline points="7 10 12 15 17 10" />
               <line x1="12" y1="15" x2="12" y2="3" />
             </svg>
-            {downloadStatus === "rendering"
-              ? "Rendering..."
-              : downloadStatus === "error"
-              ? "Failed"
-              : "Download"}
+            <span className="hidden sm:inline">
+              {downloadStatus === "rendering"
+                ? "Rendering..."
+                : downloadStatus === "error"
+                ? "Failed"
+                : "Download"}
+            </span>
           </button>
-          <div className="text-xs text-[var(--text-muted)]">
+          <div className="hidden md:block text-xs text-[var(--text-muted)]">
             <kbd className="px-1.5 py-0.5 rounded bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-[var(--text-secondary)]">
               Ctrl
             </kbd>
@@ -490,8 +501,8 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Help bar */}
-      <div className="px-6 py-2 text-xs text-[var(--text-muted)] border-b border-[var(--border-color)] bg-[var(--bg-primary)] flex gap-6 flex-wrap">
+      {/* Help bar — hidden on small screens */}
+      <div className="hidden sm:flex px-6 py-2 text-xs text-[var(--text-muted)] border-b border-[var(--border-color)] bg-[var(--bg-primary)] gap-6 flex-wrap">
         <span>
           <strong className="text-[var(--accent-pink)]">Instruments:</strong>{" "}
           piano: synth: bass: strings: pad: pluck: organ: lead: bell: kick: snare: hihat: clap: tom: cymbal:
@@ -555,7 +566,7 @@ export default function Home() {
           <span className="text-[var(--text-secondary)]">
             {sampleErrors.map((n) => <code key={n} className="font-mono">{n}</code>).reduce((a, b) => <>{a}, {b}</>)}
           </span>
-          <span className="text-[var(--text-muted)] ml-1">— check the URL and try again</span>
+          <span className="text-[var(--text-muted)] ml-1 hidden sm:inline">— check the URL and try again</span>
           <button
             onClick={() => setSampleErrors([])}
             className="ml-auto text-[var(--text-muted)] hover:text-[var(--text-primary)] text-xs"
@@ -566,10 +577,11 @@ export default function Home() {
       )}
 
       {/* Editor */}
-      <main className="flex-1 flex flex-col p-4 overflow-hidden">
+      <main className="flex-1 flex flex-col p-2 sm:p-4 overflow-hidden">
         <Editor
           value={text}
           onChange={handleTextChange}
+          onClear={handleClear}
           activeNotes={activeNotes}
         />
       </main>
